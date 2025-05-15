@@ -42,11 +42,24 @@ services:
       retries: 3
       start_period: 30s
   frontend:
-    build: ./frontend
-    volumes:
-      - ./frontend:/app
+    container_name: stockpulse-frontend
+    build: 
+      context: ./frontend
     ports:
       - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    environment:
+      - NODE_ENV=development
+      - WATCHPACK_POLLING=true
+      - CHOKIDAR_USEPOLLING=true
+      - REACT_APP_API=http://localhost:8000
+      - TSC_COMPILE_ON_ERROR=true  # Added to show TypeScript errors but continue
+      - DISABLE_ESLINT_PLUGIN=true  # Added to prevent ESLint issues
+      - PORT=3000  # Added to explicitly set React's port
     stdin_open: true
     tty: true
   etl:

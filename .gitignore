@@ -24,6 +24,12 @@ wheels/
 .installed.cfg
 *.egg
 
+# Node (for frontend)
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
 # Docker
 .docker/
 docker-compose.override.yml
