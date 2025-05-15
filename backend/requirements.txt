@@ -1,0 +1,17 @@
+fastapi
+uvicorn
+psycopg2-binary
+sqlalchemy
+pandas
+scikit-learn
+timescale
+yfinance
+transformers
+tqdm
+python-dotenv
+textblob
+requests
+nltk
+dash>=2.8.0
+dash-bootstrap-components>=1.0.0
+plotly==5.17.0

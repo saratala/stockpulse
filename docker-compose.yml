@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  dashboard:
+    build:
+      context: ./backend
+    command: python dashboard.py
+    ports:
+      - "8050:8050"
+    depends_on:
+      backend:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8050/_dash-layout"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+  backend:
+    build: ./backend
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+  frontend:
+    build: ./frontend
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "3000:3000"
+    stdin_open: true
+    tty: true
+  etl:
+    build: ./backend
+    command: python run_etl.py
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: on-failure
+    healthcheck:
+      test: ps aux | grep run_etl.py | grep -v grep || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+  db:
+    image: timescale/timescaledb:2.11.1-pg13
+    container_name: stockpulse_db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: stockpulse
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-U", "postgres" ]
+      interval: 5s
+      retries: 5
+      timeout: 5s
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+volumes:
+  pgdata:
+
