@@ -19,13 +19,16 @@ git clone https://github.com/yourusername/stockpulse.git
 cd stockpulse
 ```
 
-2. Create `.env` file with required environment variables:
+## Environment Setup
+
+2. Copy the example environment file:
 ```bash
-DATABASE_URL=postgresql://postgres:postgres@db:5432/stockpulse
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
-POSTGRES_DB=stockpulse
+cp .env.example .env
 ```
+
+- Get your Finnhub API key from https://finnhub.io/
+- Update database credentials if needed
+- Adjust other settings as required
 
 3. Start the services:
 ```bash
