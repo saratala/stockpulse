@@ -11,7 +11,8 @@ def run_etl_jobs():
         "etl_finance.py",
         "sentiment_vader.py",
         "predict_engine.py",
-        "predict_daily.py"
+        "predict_daily.py",
+        "predict_advanced_daily.py"  # Added advanced model predictions
     ]
     
     for job in jobs:

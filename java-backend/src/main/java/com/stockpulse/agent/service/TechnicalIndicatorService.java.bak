@@ -1,0 +1,444 @@
+package com.stockpulse.agent.service;
+
+import com.stockpulse.agent.model.StockPrice;
+import com.stockpulse.agent.model.Technical;
+import com.stockpulse.agent.model.TechnicalId;
+import com.stockpulse.agent.repository.StockPriceRepository;
+import com.stockpulse.agent.repository.TechnicalRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.ta4j.core.*;
+import org.ta4j.core.indicators.*;
+import org.ta4j.core.indicators.bollinger.BollingerBandsLowerIndicator;
+import org.ta4j.core.indicators.bollinger.BollingerBandsMiddleIndicator;
+import org.ta4j.core.indicators.bollinger.BollingerBandsUpperIndicator;
+import org.ta4j.core.indicators.helpers.ClosePriceIndicator;
+import org.ta4j.core.indicators.helpers.HighPriceIndicator;
+import org.ta4j.core.indicators.helpers.LowPriceIndicator;
+import org.ta4j.core.indicators.helpers.VolumeIndicator;
+import org.ta4j.core.indicators.statistics.StandardDeviationIndicator;
+import org.ta4j.core.num.DecimalNum;
+import org.ta4j.core.num.Num;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class TechnicalIndicatorService {
+    
+    private final StockPriceRepository stockPriceRepository;
+    private final TechnicalRepository technicalRepository;
+    
+    @Transactional
+    public void calculateTechnicalIndicators(String ticker) {
+        log.debug("Calculating technical indicators for ticker: {}", ticker);
+        
+        try {
+            // Get historical price data (last 200 days for moving averages)
+            LocalDateTime since = LocalDateTime.now().minusDays(200);
+            List<StockPrice> prices = stockPriceRepository.findByTickerAndDateBetween(
+                ticker, since, LocalDateTime.now());
+            
+            if (prices.size() < 50) {
+                log.warn("Insufficient price data for technical indicators calculation for ticker: {}", ticker);
+                return;
+            }
+            
+            // Convert to TA4J BarSeries
+            BarSeries series = createBarSeries(ticker, prices);
+            
+            if (series.getBarCount() < 50) {
+                log.warn("Insufficient bars for technical indicators calculation for ticker: {}", ticker);
+                return;
+            }
+            
+            // Calculate indicators
+            ClosePriceIndicator closePrice = new ClosePriceIndicator(series);
+            
+            // Moving Averages
+            SMAIndicator sma20 = new SMAIndicator(closePrice, 20);
+            SMAIndicator sma50 = new SMAIndicator(closePrice, 50);
+            SMAIndicator sma200 = new SMAIndicator(closePrice, 200);
+            
+            EMAIndicator ema20 = new EMAIndicator(closePrice, 20);
+            EMAIndicator ema50 = new EMAIndicator(closePrice, 50);
+            
+            // RSI
+            RSIIndicator rsi = new RSIIndicator(closePrice, 14);
+            
+            // MACD
+            MACDIndicator macd = new MACDIndicator(closePrice, 12, 26);
+            EMAIndicator macdSignal = new EMAIndicator(macd, 9);
+            
+            // Stochastic
+            StochasticOscillatorKIndicator stochK = new StochasticOscillatorKIndicator(series, 14);
+            SMAIndicator stochD = new SMAIndicator(stochK, 3);
+            
+            // Bollinger Bands
+            StandardDeviationIndicator sd = new StandardDeviationIndicator(closePrice, 20);
+            BollingerBandsMiddleIndicator bbMiddle = new BollingerBandsMiddleIndicator(new SMAIndicator(closePrice, 20));
+            BollingerBandsUpperIndicator bbUpper = new BollingerBandsUpperIndicator(bbMiddle, sd);
+            BollingerBandsLowerIndicator bbLower = new BollingerBandsLowerIndicator(bbMiddle, sd);
+            
+            // ADX
+            ADXIndicator adx = new ADXIndicator(series, 14);
+            
+            // CCI
+            CCIIndicator cci = new CCIIndicator(series, 20);
+            
+            // Williams %R
+            WilliamsRIndicator willR = new WilliamsRIndicator(series, 14);
+            
+            // OBV
+            OnBalanceVolumeIndicator obv = new OnBalanceVolumeIndicator(series);
+            
+            // ATR
+            ATRIndicator atr = new ATRIndicator(series, 14);
+            
+            // Save the latest technical indicators
+            int latestIndex = series.getEndIndex();
+            LocalDateTime latestDate = prices.get(prices.size() - 1).getDate();
+            
+            Technical technical = Technical.builder()
+                .ticker(ticker)
+                .date(latestDate)
+                .sma20(convertToBigDecimal(sma20.getValue(latestIndex)))
+                .sma50(convertToBigDecimal(sma50.getValue(latestIndex)))
+                .sma200(latestIndex >= 199 ? convertToBigDecimal(sma200.getValue(latestIndex)) : null)
+                .ema20(convertToBigDecimal(ema20.getValue(latestIndex)))
+                .ema50(convertToBigDecimal(ema50.getValue(latestIndex)))
+                .rsi(convertToBigDecimal(rsi.getValue(latestIndex)))
+                .macd(convertToBigDecimal(macd.getValue(latestIndex)))
+                .macdSignal(convertToBigDecimal(macdSignal.getValue(latestIndex)))
+                .macdHist(convertToBigDecimal(macd.getValue(latestIndex).minus(macdSignal.getValue(latestIndex))))
+                .stochK(convertToBigDecimal(stochK.getValue(latestIndex)))
+                .stochD(convertToBigDecimal(stochD.getValue(latestIndex)))
+                .bollingerUpper(convertToBigDecimal(bbUpper.getValue(latestIndex)))
+                .bollingerMiddle(convertToBigDecimal(bbMiddle.getValue(latestIndex)))
+                .bollingerLower(convertToBigDecimal(bbLower.getValue(latestIndex)))
+                .adx(convertToBigDecimal(adx.getValue(latestIndex)))
+                .cci(convertToBigDecimal(cci.getValue(latestIndex)))
+                .willr(convertToBigDecimal(willR.getValue(latestIndex)))
+                .obv(convertToBigDecimal(obv.getValue(latestIndex)))
+                .atr(convertToBigDecimal(atr.getValue(latestIndex)))
+                .build();
+            
+            technicalRepository.save(technical);
+            
+            log.debug("Technical indicators calculated and saved for ticker: {}", ticker);
+            
+        } catch (Exception e) {
+            log.error("Error calculating technical indicators for ticker: {}", ticker, e);
+        }
+    }
+    
+    @Transactional
+    public void calculateTechnicalIndicatorsForAllTickers() {
+        log.info("Starting technical indicators calculation for all tickers...");
+        
+        LocalDateTime since = LocalDateTime.now().minusDays(1);
+        List<String> tickers = stockPriceRepository.findDistinctTickersWithRecentData(since);
+        
+        log.info("Found {} tickers with recent data", tickers.size());
+        
+        tickers.parallelStream().forEach(ticker -> {
+            try {
+                calculateTechnicalIndicators(ticker);
+            } catch (Exception e) {
+                log.error("Error calculating technical indicators for ticker: {}", ticker, e);
+            }
+        });
+        
+        log.info("Technical indicators calculation completed for all tickers");
+    }
+    
+    private BarSeries createBarSeries(String ticker, List<StockPrice> prices) {
+        BarSeries series = new BaseBarSeries(ticker);
+        
+        for (StockPrice price : prices) {
+            ZonedDateTime zonedDateTime = price.getDate().atZone(ZoneId.systemDefault());
+            
+            Bar bar = new BaseBar(
+                zonedDateTime,
+                DecimalNum.valueOf(price.getOpen()),
+                DecimalNum.valueOf(price.getHigh()),
+                DecimalNum.valueOf(price.getLow()),
+                DecimalNum.valueOf(price.getClose()),
+                DecimalNum.valueOf(price.getVolume())
+            );
+            
+            series.addBar(bar);
+        }
+        
+        return series;
+    }
+    
+    private BigDecimal convertToBigDecimal(Num num) {
+        if (num == null || num.isNaN()) {
+            return null;
+        }
+        return BigDecimal.valueOf(num.doubleValue());
+    }
+    
+    public TechnicalAnalysisResult analyzeTechnicalSignals(String ticker) {
+        log.debug("Analyzing technical signals for ticker: {}", ticker);
+        
+        try {
+            // Get latest technical data
+            Technical latest = technicalRepository.findLatestByTicker(ticker).orElse(null);
+            if (latest == null) {
+                log.warn("No technical data available for ticker: {}", ticker);
+                return null;
+            }
+            
+            // Analyze signals
+            return TechnicalAnalysisResult.builder()
+                .ticker(ticker)
+                .analysisDate(latest.getDate())
+                .trendSignal(analyzeTrendSignal(latest))
+                .momentumSignal(analyzeMomentumSignal(latest))
+                .volatilitySignal(analyzeVolatilitySignal(latest))
+                .overallSignal(calculateOverallSignal(latest))
+                .confidence(calculateSignalConfidence(latest))
+                .keyLevels(calculateKeyLevels(latest))
+                .build();
+            
+        } catch (Exception e) {
+            log.error("Error analyzing technical signals for ticker: {}", ticker, e);
+            return null;
+        }
+    }
+    
+    private TechnicalAnalysisResult.SignalType analyzeTrendSignal(Technical technical) {
+        // Simple trend analysis using moving averages
+        if (technical.getSma20() != null && technical.getSma50() != null) {
+            if (technical.getSma20().compareTo(technical.getSma50()) > 0) {
+                return TechnicalAnalysisResult.SignalType.BULLISH;
+            } else if (technical.getSma20().compareTo(technical.getSma50()) < 0) {
+                return TechnicalAnalysisResult.SignalType.BEARISH;
+            }
+        }
+        return TechnicalAnalysisResult.SignalType.NEUTRAL;
+    }
+    
+    private TechnicalAnalysisResult.SignalType analyzeMomentumSignal(Technical technical) {
+        // RSI-based momentum analysis
+        if (technical.getRsi() != null) {
+            if (technical.getRsi().compareTo(BigDecimal.valueOf(70)) > 0) {
+                return TechnicalAnalysisResult.SignalType.BEARISH; // Overbought
+            } else if (technical.getRsi().compareTo(BigDecimal.valueOf(30)) < 0) {
+                return TechnicalAnalysisResult.SignalType.BULLISH; // Oversold
+            }
+        }
+        return TechnicalAnalysisResult.SignalType.NEUTRAL;
+    }
+    
+    private TechnicalAnalysisResult.SignalType analyzeVolatilitySignal(Technical technical) {
+        // Bollinger Bands analysis
+        if (technical.getBollingerUpper() != null && technical.getBollingerLower() != null) {
+            BigDecimal bandWidth = technical.getBollingerUpper().subtract(technical.getBollingerLower());
+            BigDecimal avgPrice = technical.getBollingerUpper().add(technical.getBollingerLower()).divide(BigDecimal.valueOf(2));
+            BigDecimal relativeWidth = bandWidth.divide(avgPrice, 4, BigDecimal.ROUND_HALF_UP);
+            
+            if (relativeWidth.compareTo(BigDecimal.valueOf(0.1)) > 0) {
+                return TechnicalAnalysisResult.SignalType.BEARISH; // High volatility
+            } else if (relativeWidth.compareTo(BigDecimal.valueOf(0.05)) < 0) {
+                return TechnicalAnalysisResult.SignalType.BULLISH; // Low volatility
+            }
+        }
+        return TechnicalAnalysisResult.SignalType.NEUTRAL;
+    }
+    
+    private TechnicalAnalysisResult.SignalType calculateOverallSignal(Technical technical) {
+        int bullishSignals = 0;
+        int bearishSignals = 0;
+        
+        // Count signals
+        TechnicalAnalysisResult.SignalType trendSignal = analyzeTrendSignal(technical);
+        TechnicalAnalysisResult.SignalType momentumSignal = analyzeMomentumSignal(technical);
+        TechnicalAnalysisResult.SignalType volatilitySignal = analyzeVolatilitySignal(technical);
+        
+        if (trendSignal == TechnicalAnalysisResult.SignalType.BULLISH) bullishSignals++;
+        if (trendSignal == TechnicalAnalysisResult.SignalType.BEARISH) bearishSignals++;
+        
+        if (momentumSignal == TechnicalAnalysisResult.SignalType.BULLISH) bullishSignals++;
+        if (momentumSignal == TechnicalAnalysisResult.SignalType.BEARISH) bearishSignals++;
+        
+        if (volatilitySignal == TechnicalAnalysisResult.SignalType.BULLISH) bullishSignals++;
+        if (volatilitySignal == TechnicalAnalysisResult.SignalType.BEARISH) bearishSignals++;
+        
+        if (bullishSignals > bearishSignals) {
+            return TechnicalAnalysisResult.SignalType.BULLISH;
+        } else if (bearishSignals > bullishSignals) {
+            return TechnicalAnalysisResult.SignalType.BEARISH;
+        } else {
+            return TechnicalAnalysisResult.SignalType.NEUTRAL;
+        }
+    }
+    
+    private double calculateSignalConfidence(Technical technical) {
+        double confidence = 50.0; // Base confidence
+        
+        // Boost confidence based on indicator alignment
+        if (technical.getRsi() != null && technical.getAdx() != null) {
+            if (technical.getAdx().compareTo(BigDecimal.valueOf(25)) > 0) {
+                confidence += 15; // Strong trend
+            }
+            
+            if (technical.getRsi().compareTo(BigDecimal.valueOf(70)) > 0 || 
+                technical.getRsi().compareTo(BigDecimal.valueOf(30)) < 0) {
+                confidence += 10; // Clear oversold/overbought
+            }
+        }
+        
+        return Math.min(95.0, confidence);
+    }
+    
+    private TechnicalAnalysisResult.KeyLevels calculateKeyLevels(Technical technical) {
+        return TechnicalAnalysisResult.KeyLevels.builder()
+            .support(technical.getBollingerLower())
+            .resistance(technical.getBollingerUpper())
+            .pivot(technical.getBollingerMiddle())
+            .sma20(technical.getSma20())
+            .sma50(technical.getSma50())
+            .build();
+    }
+    
+    // Technical Analysis Result DTO
+    public static class TechnicalAnalysisResult {
+        private String ticker;
+        private LocalDateTime analysisDate;
+        private SignalType trendSignal;
+        private SignalType momentumSignal;
+        private SignalType volatilitySignal;
+        private SignalType overallSignal;
+        private double confidence;
+        private KeyLevels keyLevels;
+        
+        public static TechnicalAnalysisResultBuilder builder() {
+            return new TechnicalAnalysisResultBuilder();
+        }
+        
+        public enum SignalType {
+            BULLISH, BEARISH, NEUTRAL
+        }
+        
+        public static class KeyLevels {
+            private BigDecimal support;
+            private BigDecimal resistance;
+            private BigDecimal pivot;
+            private BigDecimal sma20;
+            private BigDecimal sma50;
+            
+            public static KeyLevelsBuilder builder() {
+                return new KeyLevelsBuilder();
+            }
+            
+            // Getters and setters
+            public BigDecimal getSupport() { return support; }
+            public void setSupport(BigDecimal support) { this.support = support; }
+            
+            public BigDecimal getResistance() { return resistance; }
+            public void setResistance(BigDecimal resistance) { this.resistance = resistance; }
+            
+            public BigDecimal getPivot() { return pivot; }
+            public void setPivot(BigDecimal pivot) { this.pivot = pivot; }
+            
+            public BigDecimal getSma20() { return sma20; }
+            public void setSma20(BigDecimal sma20) { this.sma20 = sma20; }
+            
+            public BigDecimal getSma50() { return sma50; }
+            public void setSma50(BigDecimal sma50) { this.sma50 = sma50; }
+            
+            public static class KeyLevelsBuilder {
+                private BigDecimal support;
+                private BigDecimal resistance;
+                private BigDecimal pivot;
+                private BigDecimal sma20;
+                private BigDecimal sma50;
+                
+                public KeyLevelsBuilder support(BigDecimal support) { this.support = support; return this; }
+                public KeyLevelsBuilder resistance(BigDecimal resistance) { this.resistance = resistance; return this; }
+                public KeyLevelsBuilder pivot(BigDecimal pivot) { this.pivot = pivot; return this; }
+                public KeyLevelsBuilder sma20(BigDecimal sma20) { this.sma20 = sma20; return this; }
+                public KeyLevelsBuilder sma50(BigDecimal sma50) { this.sma50 = sma50; return this; }
+                
+                public KeyLevels build() {
+                    KeyLevels levels = new KeyLevels();
+                    levels.support = this.support;
+                    levels.resistance = this.resistance;
+                    levels.pivot = this.pivot;
+                    levels.sma20 = this.sma20;
+                    levels.sma50 = this.sma50;
+                    return levels;
+                }
+            }
+        }
+        
+        // Getters and setters
+        public String getTicker() { return ticker; }
+        public void setTicker(String ticker) { this.ticker = ticker; }
+        
+        public LocalDateTime getAnalysisDate() { return analysisDate; }
+        public void setAnalysisDate(LocalDateTime analysisDate) { this.analysisDate = analysisDate; }
+        
+        public SignalType getTrendSignal() { return trendSignal; }
+        public void setTrendSignal(SignalType trendSignal) { this.trendSignal = trendSignal; }
+        
+        public SignalType getMomentumSignal() { return momentumSignal; }
+        public void setMomentumSignal(SignalType momentumSignal) { this.momentumSignal = momentumSignal; }
+        
+        public SignalType getVolatilitySignal() { return volatilitySignal; }
+        public void setVolatilitySignal(SignalType volatilitySignal) { this.volatilitySignal = volatilitySignal; }
+        
+        public SignalType getOverallSignal() { return overallSignal; }
+        public void setOverallSignal(SignalType overallSignal) { this.overallSignal = overallSignal; }
+        
+        public double getConfidence() { return confidence; }
+        public void setConfidence(double confidence) { this.confidence = confidence; }
+        
+        public KeyLevels getKeyLevels() { return keyLevels; }
+        public void setKeyLevels(KeyLevels keyLevels) { this.keyLevels = keyLevels; }
+        
+        public static class TechnicalAnalysisResultBuilder {
+            private String ticker;
+            private LocalDateTime analysisDate;
+            private SignalType trendSignal;
+            private SignalType momentumSignal;
+            private SignalType volatilitySignal;
+            private SignalType overallSignal;
+            private double confidence;
+            private KeyLevels keyLevels;
+            
+            public TechnicalAnalysisResultBuilder ticker(String ticker) { this.ticker = ticker; return this; }
+            public TechnicalAnalysisResultBuilder analysisDate(LocalDateTime analysisDate) { this.analysisDate = analysisDate; return this; }
+            public TechnicalAnalysisResultBuilder trendSignal(SignalType trendSignal) { this.trendSignal = trendSignal; return this; }
+            public TechnicalAnalysisResultBuilder momentumSignal(SignalType momentumSignal) { this.momentumSignal = momentumSignal; return this; }
+            public TechnicalAnalysisResultBuilder volatilitySignal(SignalType volatilitySignal) { this.volatilitySignal = volatilitySignal; return this; }
+            public TechnicalAnalysisResultBuilder overallSignal(SignalType overallSignal) { this.overallSignal = overallSignal; return this; }
+            public TechnicalAnalysisResultBuilder confidence(double confidence) { this.confidence = confidence; return this; }
+            public TechnicalAnalysisResultBuilder keyLevels(KeyLevels keyLevels) { this.keyLevels = keyLevels; return this; }
+            
+            public TechnicalAnalysisResult build() {
+                TechnicalAnalysisResult result = new TechnicalAnalysisResult();
+                result.ticker = this.ticker;
+                result.analysisDate = this.analysisDate;
+                result.trendSignal = this.trendSignal;
+                result.momentumSignal = this.momentumSignal;
+                result.volatilitySignal = this.volatilitySignal;
+                result.overallSignal = this.overallSignal;
+                result.confidence = this.confidence;
+                result.keyLevels = this.keyLevels;
+                return result;
+            }
+        }
+    }
+}

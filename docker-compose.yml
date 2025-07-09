@@ -23,7 +23,9 @@ services:
       retries: 3
       start_period: 30s
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     command: uvicorn main:app --host 0.0.0.0 --port 8000
     volumes:
       - ./backend:/app
@@ -46,7 +48,7 @@ services:
     build: 
       context: ./frontend
     ports:
-      - "3000:3000"
+      - "3010:3010"
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -59,12 +61,12 @@ services:
       - REACT_APP_API=http://localhost:8000
       - TSC_COMPILE_ON_ERROR=true  # Added to show TypeScript errors but continue
       - DISABLE_ESLINT_PLUGIN=true  # Added to prevent ESLint issues
-      - PORT=3000  # Added to explicitly set React's port
+      - PORT=3010  # Changed to port 3010 to avoid conflicts
     stdin_open: true
     tty: true
   etl:
     build: ./backend
-    command: python run_etl.py
+    command: /bin/bash -c "python etl_finance.py && python sentiment_vader.py"
     depends_on:
       db:
         condition: service_healthy
@@ -73,11 +75,69 @@ services:
       - PYTHONUNBUFFERED=1
     restart: on-failure
     healthcheck:
-      test: ps aux | grep run_etl.py | grep -v grep || exit 1
+      test: ps aux | grep etl_finance.py | grep -v grep || exit 1
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
+
+  predict:
+    build: ./backend
+    command: /bin/bash -c "python predict_engine.py && python predict_daily.py"
+    depends_on:
+      etl:
+        condition: service_completed_successfully
+    env_file: .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: on-failure
+    healthcheck:
+      test: ps aux | grep predict_engine.py | grep -v grep || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  advanced_predict:
+    build: ./backend
+    command: python predict_advanced_daily.py
+    depends_on:
+      etl:
+        condition: service_completed_successfully
+    env_file: .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: on-failure
+    healthcheck:
+      test: ps aux | grep predict_advanced_daily.py | grep -v grep || exit 1
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  signal_scheduler:
+    build: ./backend
+    command: python signal_prediction_scheduler.py
+    depends_on:
+      backend:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=stockpulse
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+    restart: unless-stopped
+    healthcheck:
+      test: ps aux | grep signal_prediction_scheduler.py | grep -v grep || exit 1
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 60s
   db:
     image: timescale/timescaledb:2.11.1-pg13
     container_name: stockpulse_db

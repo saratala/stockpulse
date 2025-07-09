@@ -2,12 +2,14 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy package files
+# Install dependencies for better compatibility
+RUN apk add --no-cache git python3 make g++
+
 # Copy package files first for better caching
 COPY package*.json ./
 
-
-RUN npm install
+# Install dependencies with legacy peer deps flag for compatibility
+RUN npm install --legacy-peer-deps
 
 # Copy source code
 COPY . .
@@ -15,9 +17,12 @@ COPY . .
 # Set environment variables
 ENV NODE_ENV=development
 ENV WATCHPACK_POLLING=true
-ENV PORT=3000
+ENV PORT=3010
+ENV REACT_APP_API_URL=http://localhost:8000
+ENV TSC_COMPILE_ON_ERROR=true
+ENV DISABLE_ESLINT_PLUGIN=true
 
-# Build the app
+# Start the development server
 CMD ["npm", "start"]
 
 # Production stage
@@ -29,6 +34,6 @@ CMD ["npm", "start"]
 # Copy nginx configuration if needed
 # COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-EXPOSE 3000
+EXPOSE 3010
 
 #CMD ["nginx", "-g", "daemon off;"]

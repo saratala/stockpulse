@@ -1,0 +1,208 @@
+spring:
+  application:
+    name: stockpulse-agent
+  
+  datasource:
+    url: jdbc:postgresql://localhost:5432/stockpulse
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        use_sql_comments: true
+  
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+  
+  cache:
+    type: redis
+    redis:
+      time-to-live: 300000 # 5 minutes
+  
+  web:
+    cors:
+      allowed-origins: "*"
+      allowed-methods: "*"
+      allowed-headers: "*"
+      allow-credentials: true
+
+server:
+  port: 8181
+  servlet:
+    context-path: /api/v1
+
+logging:
+  level:
+    com.stockpulse.agent: DEBUG
+    org.springframework.web: INFO
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+
+# Application specific properties
+app:
+  stock-data:
+    api:
+      yahoo-finance:
+        base-url: https://query1.finance.yahoo.com
+        timeout: 10000
+        retry-attempts: 3
+    cache:
+      stock-info-ttl: 300 # 5 minutes
+      price-data-ttl: 60  # 1 minute
+    
+  scheduling:
+    enabled: true
+    screening:
+      cron: "0 */15 * * * *" # Every 15 minutes
+    predictions:
+      cron: "0 */30 * * * *" # Every 30 minutes
+    price-updates:
+      cron: "0 */5 * * * *"  # Every 5 minutes
+    sentiment:
+      cron: "0 */10 * * * *" # Every 10 minutes
+    news-fetch:
+      cron: "0 0 */2 * * *"  # Every 2 hours
+  
+  technical-analysis:
+    indicators:
+      rsi-period: 14
+      macd-fast: 12
+      macd-slow: 26
+      macd-signal: 9
+      bollinger-period: 20
+      bollinger-deviation: 2.0
+      adx-period: 14
+      stoch-k-period: 14
+      stoch-d-period: 3
+    
+  screening:
+    min-score: 70
+    max-results: 50
+    volume-threshold: 100000
+    price-range:
+      min: 5.0
+      max: 1000.0
+    
+  sentiment:
+    enabled: true
+    confidence-threshold: 0.3
+    impact-weights:
+      immediate: 0.4
+      short-term: 0.3
+      long-term: 0.2
+      negligible: 0.1
+  
+  # News API Configuration
+  news:
+    api:
+      alpha-vantage:
+        key: ${ALPHA_VANTAGE_API_KEY:}
+      newsapi:
+        key: ${NEWSAPI_KEY:}
+      finnhub:
+        key: ${FINNHUB_API_KEY:}
+    
+    # News fetching configuration
+    fetch:
+      enabled: true
+      batch-size: 50
+      max-age-hours: 48
+      default-tickers:
+        - "AAPL"
+        - "GOOGL"
+        - "MSFT"
+        - "AMZN"
+        - "TSLA"
+        - "META"
+        - "NVDA"
+        - "NFLX"
+  
+  # LLM Configuration
+  llm:
+    enabled: true
+    provider: openai # options: openai, anthropic, fallback
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      model: gpt-3.5-turbo
+      max-tokens: 150
+      temperature: 0.1
+    anthropic:
+      api-key: ${ANTHROPIC_API_KEY:}
+      model: claude-3-haiku-20240307
+      max-tokens: 150
+    
+    # Sentiment analysis configuration
+    sentiment:
+      batch-size: 10
+      timeout-seconds: 30
+      retry-attempts: 2
+      fallback-enabled: true
+
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  
+  datasource:
+    url: jdbc:postgresql://postgres:5432/stockpulse
+    username: postgres
+    password: postgres
+  
+  data:
+    redis:
+      host: redis
+      port: 6379
+
+server:
+  port: 8181
+
+---
+spring:
+  config:
+    activate:
+      on-profile: test
+  
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: password
+  
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect

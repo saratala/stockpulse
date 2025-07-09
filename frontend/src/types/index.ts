@@ -6,6 +6,7 @@ export interface StockPrediction {
   predicted_direction: number;
   confidence_score: number;
   model_version: string;
+  current_price?: number;
 }
 
 export interface SentimentData {
