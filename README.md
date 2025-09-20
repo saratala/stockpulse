@@ -1,25 +1,25 @@
 # StockPulse
 
-A comprehensive real-time stock market analysis platform combining AI-powered sentiment analysis, technical indicators, and machine learning predictions to help traders make informed decisions.
+A comprehensive real-time stock market analysis platform built with Java Spring Boot, combining AI-powered sentiment analysis, technical indicators, and advanced screening to help traders make informed decisions.
 
 ## 🚀 Features
 
 ### Core Functionality
 - **Real-time Stock Data**: Continuous price updates every 5 minutes with historical data tracking
 - **AI-Powered Sentiment Analysis**: Advanced LLM-based sentiment analysis of news articles with trend tracking
-- **Machine Learning Predictions**: Price movement predictions using XGBoost, Prophet, and TensorFlow models
+- **Advanced Signal Detection**: Technical analysis-based signal detection with confidence scoring
 - **Advanced Stock Screener**: AI-powered signal detection with confidence scoring and grading system
 - **Technical Analysis**: Comprehensive technical indicators including RSI, MACD, Bollinger Bands, and Heikin Ashi signals
 - **Interactive Dashboard**: Real-time system monitoring with glassmorphism UI design
 
 ### Key Components
-- **Multi-Architecture Backend**: Java Spring Boot (primary) and Python FastAPI services
+- **Java Spring Boot Backend**: Robust enterprise-grade backend with comprehensive REST APIs
 - **Automated Schedulers**: 
   - Price updates (5 minutes)
   - Sentiment analysis (10 minutes)
   - News fetching (2 hours)
   - Stock screening (15 minutes)
-  - Predictions generation (30 minutes)
+  - Signal generation (30 minutes)
 - **Data Persistence**: TimescaleDB for time-series data with Redis caching
 - **Responsive Frontend**: React with TypeScript, Tailwind CSS, and Framer Motion animations
 
@@ -27,10 +27,10 @@ A comprehensive real-time stock market analysis platform combining AI-powered se
 
 ### Backend
 - **Java Backend**: Spring Boot 3.2, Java 21, PostgreSQL, Redis
-- **Python Backend**: FastAPI, scikit-learn, TensorFlow, Prophet, yfinance
 - **Database**: TimescaleDB (PostgreSQL extension) for time-series data
 - **Caching**: Redis for performance optimization
-- **Technical Analysis**: TA4J (Java), TA-Lib (Python)
+- **Technical Analysis**: TA4J library for comprehensive technical indicators
+- **External APIs**: Yahoo Finance, News APIs, LLM services
 
 ### Frontend
 - **Framework**: React 18 with TypeScript
@@ -45,14 +45,9 @@ A comprehensive real-time stock market analysis platform combining AI-powered se
 - **Health**: `/api/v1/health` - System health check
 - **Stocks**: `/api/v1/stocks` - Stock data and prices
 - **Screener**: `/api/v1/screener` - AI-powered stock screening
-- **Predictions**: `/api/v1/predictions` - ML-based price predictions
+- **Predictions**: `/api/v1/predictions` - Technical analysis-based predictions
 - **Sentiment**: `/api/v1/sentiment-analysis` - LLM sentiment analysis
 - **Data Updates**: `/api/v1/data` - Manual data refresh triggers
-
-### Python Backend (Port 8000)
-- **Dashboard**: Port 8050 - Plotly Dash analytics dashboard
-- **ETL Services**: Automated data fetching and processing
-- **ML Models**: Advanced prediction engines
 
 ## 🚀 Quick Start
 
@@ -81,11 +76,6 @@ Configure the following in `.env`:
 
 3. **Start all services**:
 ```bash
-# For the main application with Java backend
-cd java-backend
-docker-compose up --build
-
-# Or for Python-only version
 docker-compose up --build
 ```
 
@@ -93,8 +83,6 @@ docker-compose up --build
 
 - **Frontend**: http://localhost:3010
 - **Java API**: http://localhost:8181/api/v1
-- **Python API**: http://localhost:8000
-- **Dashboard**: http://localhost:8050
 - **Database**: localhost:5432
 - **Redis**: localhost:6379
 
@@ -120,19 +108,13 @@ npm start
 # Java backend
 cd java-backend
 ./gradlew bootRun
-
-# Python backend
-cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload
 ```
 
 ### Architecture Notes
 - **Frontend** connects to Java backend on port 8181
-- **Java backend** is the primary API serving the React frontend
-- **Python backend** handles ML models and complex computations
+- **Java backend** serves all APIs and handles business logic
 - **All services** run in Docker containers for consistency
-- **Data flow**: External APIs → Backend Services → TimescaleDB → Redis Cache → Frontend
+- **Data flow**: External APIs → Java Backend → TimescaleDB → Redis Cache → Frontend
 
 ## 📈 Features in Detail
 
@@ -145,10 +127,9 @@ uvicorn main:app --reload
 
 ### Sentiment Analysis
 - LLM-enhanced sentiment analysis
-- Traditional VADER sentiment comparison
 - 7-day trend visualization
 - News article aggregation
-- Sentiment impact on predictions
+- Sentiment impact on signal generation
 
 ### Technical Analysis
 - 20+ technical indicators

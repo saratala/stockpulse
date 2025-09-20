@@ -5,13 +5,13 @@
 ### Docker Environment
 - **ALL applications run in Docker containers** - never use `npm start` or direct commands
 - Frontend runs on port 3010 via Docker
-- Backend runs on port 8181 via Docker
+- Java Backend runs on port 8181 via Docker
 - Use `docker-compose up` to start all services
 
 ### Architecture
 - Java Spring Boot backend with PostgreSQL + TimescaleDB + Redis
 - React TypeScript frontend with Tailwind CSS
-- Schedulers running: price updates (5min), sentiment analysis (10min), news fetching (2h), screening (15min), predictions (30min)
+- Schedulers running: price updates (5min), sentiment analysis (10min), news fetching (2h), screening (15min), signal generation (30min)
 
 ### API Integration
 - Frontend API base URL: `http://localhost:8181/api/v1`
@@ -25,8 +25,7 @@
 
 ### Current Status
 - Frontend: ✅ Running on port 3010, builds successfully
-- Python Backend: ❌ Missing dependencies (ta module)
-- Java Backend: ✅ Running on port 8181, fully operational
+- Java Backend: ✅ Running on port 8181, fully operational (single backend solution)
 - Database: ✅ Running TimescaleDB on port 5432
 - Redis: ✅ Connected and working properly
 
@@ -41,3 +40,4 @@
 - Build frontend: `docker-compose build frontend`
 - Check logs: `docker-compose logs [service]`
 - Java backend container: `stockpulse-java-final`
+- Note: Python backend has been removed - Java backend handles all functionality
