@@ -59,119 +59,27 @@ COPY --from=frontend-builder /app/frontend/build /usr/share/nginx/html
 COPY db/init.sql /app/init.sql
 COPY db/backup/stockpulse_data.sql /app/data.sql
 
-# ============================================
-# Configure Nginx
-# ============================================
-RUN rm /etc/nginx/sites-enabled/default && \
-    echo 'server { \
-    listen 80; \
-    location / { \
-        root /usr/share/nginx/html; \
-        index index.html; \
-        try_files $uri $uri/ /index.html; \
-    } \
-    location /api/ { \
-        proxy_pass http://127.0.0.1:8181; \
-        proxy_http_version 1.1; \
-        proxy_set_header Upgrade $http_upgrade; \
-        proxy_set_header Connection "upgrade"; \
-        proxy_set_header Host $host; \
-        proxy_set_header X-Real-IP $remote_addr; \
-        proxy_connect_timeout 60s; \
-        proxy_send_timeout 60s; \
-        proxy_read_timeout 60s; \
-    } \
-    location /stream/ { \
-        proxy_pass http://127.0.0.1:8181; \
-        proxy_http_version 1.1; \
-        proxy_set_header Connection ""; \
-        proxy_buffering off; \
-    } \
-}' > /etc/nginx/sites-enabled/stockpulse
+# Copy configuration files
+COPY scripts/start.sh /app/start.sh
+COPY scripts/supervisord.conf /etc/supervisor/conf.d/stockpulse.conf
+COPY scripts/nginx.conf /etc/nginx/sites-enabled/stockpulse
 
-# ============================================
+# Configure nginx
+RUN rm -f /etc/nginx/sites-enabled/default
+
 # Configure Redis
-# ============================================
 RUN sed -i 's/^bind .*/bind 127.0.0.1/' /etc/redis/redis.conf && \
     sed -i 's/^daemonize yes/daemonize no/' /etc/redis/redis.conf && \
     echo "maxmemory 128mb" >> /etc/redis/redis.conf && \
     echo "maxmemory-policy allkeys-lru" >> /etc/redis/redis.conf
 
-# ============================================
-# Configure Supervisor
-# ============================================
+# Setup directories and permissions
 RUN mkdir -p /var/log/supervisor && \
-    echo '[supervisord] \
-nodaemon=true \
-logfile=/var/log/supervisor/supervisord.log \
-\
-[program:postgresql] \
-command=/usr/lib/postgresql/14/bin/postgres -D /var/lib/postgresql/14/main -c config_file=/etc/postgresql/14/main/postgresql.conf \
-user=postgres \
-autostart=true \
-autorestart=true \
-priority=1 \
-\
-[program:redis] \
-command=/usr/bin/redis-server /etc/redis/redis.conf \
-autostart=true \
-autorestart=true \
-priority=2 \
-\
-[program:nginx] \
-command=/usr/sbin/nginx -g "daemon off;" \
-autostart=true \
-autorestart=true \
-priority=3 \
-\
-[program:java] \
-command=/bin/bash -c "sleep 15 && java -Xmx512m -Xms256m -XX:+UseG1GC -jar /app/app.jar" \
-autostart=true \
-autorestart=true \
-priority=4 \
-' > /etc/supervisor/conf.d/stockpulse.conf
+    mkdir -p /var/lib/postgresql/14/main && \
+    chown -R postgres:postgres /var/lib/postgresql && \
+    chmod +x /app/start.sh
 
-# ============================================
-# Startup script
-# ============================================
-RUN echo '#!/bin/bash \
-set -e \
-\
-# Initialize PostgreSQL if needed \
-if [ ! -f /var/lib/postgresql/14/main/PG_VERSION ]; then \
-    echo "Initializing PostgreSQL..." \
-    mkdir -p /var/lib/postgresql/14/main \
-    chown -R postgres:postgres /var/lib/postgresql \
-    sudo -u postgres /usr/lib/postgresql/14/bin/initdb -D /var/lib/postgresql/14/main \
-    echo "host all all 0.0.0.0/0 md5" >> /var/lib/postgresql/14/main/pg_hba.conf \
-    echo "local all all trust" >> /var/lib/postgresql/14/main/pg_hba.conf \
-fi \
-\
-# Start PostgreSQL temporarily to setup database \
-echo "Starting PostgreSQL for initialization..." \
-sudo -u postgres /usr/lib/postgresql/14/bin/pg_ctl -D /var/lib/postgresql/14/main -l /tmp/pg.log start \
-sleep 5 \
-\
-# Create database and load data if needed \
-if ! sudo -u postgres psql -lqt | cut -d \| -f 1 | grep -qw stockpulse; then \
-    echo "Creating database..." \
-    sudo -u postgres createdb stockpulse \
-    sudo -u postgres psql stockpulse -f /app/init.sql || true \
-    sudo -u postgres psql stockpulse -f /app/data.sql || true \
-    echo "Database created and data loaded!" \
-fi \
-\
-# Stop PostgreSQL (supervisor will restart it) \
-sudo -u postgres /usr/lib/postgresql/14/bin/pg_ctl -D /var/lib/postgresql/14/main stop \
-sleep 2 \
-\
-# Start all services via supervisor \
-exec /usr/bin/supervisord -c /etc/supervisor/supervisord.conf \
-' > /app/start.sh && chmod +x /app/start.sh
-
-# ============================================
 # Environment variables
-# ============================================
 ENV SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/stockpulse
 ENV SPRING_DATASOURCE_USERNAME=postgres
 ENV SPRING_DATASOURCE_PASSWORD=postgres
