@@ -11,12 +11,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
+import java.io.StringReader;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -257,32 +261,304 @@ public class NewsService {
     
     private List<NewsArticle> fetchFromFreeSources(String ticker) {
         List<NewsArticle> articles = new ArrayList<>();
-        
+
+        // Try Yahoo Finance RSS first
         try {
-            // Yahoo Finance RSS (free)
-            String url = String.format("https://feeds.finance.yahoo.com/rss/2.0/headline?s=%s&region=US&lang=en-US", ticker);
-            
-            // Note: This is a simplified implementation
-            // In a real application, you would parse RSS/XML properly
-            log.info("Fetching from free sources for ticker: {} (RSS parsing not implemented)", ticker);
-            
-            // Create sample data for demonstration
-            NewsArticle sampleArticle = NewsArticle.builder()
-                    .ticker(ticker.toUpperCase())
-                    .title("Sample news for " + ticker)
-                    .content("This is sample news content for " + ticker + " from free sources")
-                    .url("https://example.com/news/" + ticker)
-                    .source("Free Sources")
-                    .publishedAt(LocalDateTime.now())
-                    .build();
-            
-            articles.add(sampleArticle);
-            
+            List<NewsArticle> yahooNews = fetchFromYahooRSS(ticker);
+            articles.addAll(yahooNews);
         } catch (Exception e) {
-            log.error("Error fetching from free sources for ticker: {}", ticker, e);
+            log.warn("Yahoo RSS fetch failed for {}: {}", ticker, e.getMessage());
         }
-        
+
+        // Try Google News RSS as fallback
+        if (articles.isEmpty()) {
+            try {
+                List<NewsArticle> googleNews = fetchFromGoogleNews(ticker);
+                articles.addAll(googleNews);
+            } catch (Exception e) {
+                log.warn("Google News fetch failed for {}: {}", ticker, e.getMessage());
+            }
+        }
+
+        // Try Finviz news scraping as last resort
+        if (articles.isEmpty()) {
+            try {
+                List<NewsArticle> finvizNews = fetchFromFinviz(ticker);
+                articles.addAll(finvizNews);
+            } catch (Exception e) {
+                log.warn("Finviz fetch failed for {}: {}", ticker, e.getMessage());
+            }
+        }
+
+        log.info("Fetched {} articles from free sources for {}", articles.size(), ticker);
         return articles;
+    }
+
+    private List<NewsArticle> fetchFromYahooRSS(String ticker) {
+        List<NewsArticle> articles = new ArrayList<>();
+
+        try {
+            String url = String.format("https://feeds.finance.yahoo.com/rss/2.0/headline?s=%s&region=US&lang=en-US", ticker);
+            log.info("Fetching Yahoo RSS for: {}", ticker);
+
+            String response = webClient.get()
+                    .uri(url)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .timeout(java.time.Duration.ofSeconds(15))
+                    .block();
+
+            if (response != null && response.contains("<item>")) {
+                articles = parseRSSResponse(response, ticker, "Yahoo Finance");
+            }
+        } catch (Exception e) {
+            log.error("Error fetching Yahoo RSS for {}: {}", ticker, e.getMessage());
+        }
+
+        return articles;
+    }
+
+    private List<NewsArticle> fetchFromGoogleNews(String ticker) {
+        List<NewsArticle> articles = new ArrayList<>();
+
+        try {
+            // Google News RSS feed for stock ticker
+            String query = ticker + "+stock";
+            String url = String.format("https://news.google.com/rss/search?q=%s&hl=en-US&gl=US&ceid=US:en", query);
+            log.info("Fetching Google News RSS for: {}", ticker);
+
+            String response = webClient.get()
+                    .uri(url)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .timeout(java.time.Duration.ofSeconds(15))
+                    .block();
+
+            if (response != null && response.contains("<item>")) {
+                articles = parseRSSResponse(response, ticker, "Google News");
+            }
+        } catch (Exception e) {
+            log.error("Error fetching Google News for {}: {}", ticker, e.getMessage());
+        }
+
+        return articles;
+    }
+
+    private List<NewsArticle> fetchFromFinviz(String ticker) {
+        List<NewsArticle> articles = new ArrayList<>();
+
+        try {
+            String url = String.format("https://finviz.com/quote.ashx?t=%s", ticker);
+            log.info("Fetching Finviz news for: {}", ticker);
+
+            String response = webClient.get()
+                    .uri(url)
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                    .header("Accept", "text/html,application/xhtml+xml")
+                    .retrieve()
+                    .bodyToMono(String.class)
+                    .timeout(java.time.Duration.ofSeconds(15))
+                    .block();
+
+            if (response != null) {
+                articles = parseFinvizHTML(response, ticker);
+            }
+        } catch (Exception e) {
+            log.error("Error fetching Finviz news for {}: {}", ticker, e.getMessage());
+        }
+
+        return articles;
+    }
+
+    private List<NewsArticle> parseRSSResponse(String xml, String ticker, String sourceName) {
+        List<NewsArticle> articles = new ArrayList<>();
+
+        try {
+            // Simple XML parsing using regex (works for RSS feeds)
+            Pattern itemPattern = Pattern.compile("<item>(.*?)</item>", Pattern.DOTALL);
+            Pattern titlePattern = Pattern.compile("<title><!\\[CDATA\\[(.*?)\\]\\]></title>|<title>(.*?)</title>", Pattern.DOTALL);
+            Pattern linkPattern = Pattern.compile("<link><!\\[CDATA\\[(.*?)\\]\\]></link>|<link>(.*?)</link>", Pattern.DOTALL);
+            Pattern descPattern = Pattern.compile("<description><!\\[CDATA\\[(.*?)\\]\\]></description>|<description>(.*?)</description>", Pattern.DOTALL);
+            Pattern pubDatePattern = Pattern.compile("<pubDate>(.*?)</pubDate>", Pattern.DOTALL);
+
+            Matcher itemMatcher = itemPattern.matcher(xml);
+            int count = 0;
+
+            while (itemMatcher.find() && count < 20) {
+                String item = itemMatcher.group(1);
+
+                // Extract title
+                String title = extractRSSField(item, titlePattern);
+                if (title == null || title.isEmpty()) continue;
+
+                // Extract link
+                String link = extractRSSField(item, linkPattern);
+                if (link == null || link.isEmpty()) continue;
+
+                // Extract description
+                String description = extractRSSField(item, descPattern);
+                if (description == null) description = title;
+
+                // Clean HTML tags from description
+                description = description.replaceAll("<[^>]+>", "").trim();
+                if (description.length() > 500) {
+                    description = description.substring(0, 500) + "...";
+                }
+
+                // Extract and parse publish date
+                LocalDateTime pubDate = LocalDateTime.now();
+                Matcher pubDateMatcher = pubDatePattern.matcher(item);
+                if (pubDateMatcher.find()) {
+                    pubDate = parseRSSDate(pubDateMatcher.group(1));
+                }
+
+                NewsArticle article = NewsArticle.builder()
+                        .ticker(ticker.toUpperCase())
+                        .title(cleanHtml(title))
+                        .content(cleanHtml(description))
+                        .url(link)
+                        .source(sourceName)
+                        .publishedAt(pubDate)
+                        .build();
+
+                articles.add(article);
+                count++;
+            }
+
+            log.info("Parsed {} articles from {} RSS for {}", articles.size(), sourceName, ticker);
+
+        } catch (Exception e) {
+            log.error("Error parsing RSS for {}: {}", ticker, e.getMessage());
+        }
+
+        return articles;
+    }
+
+    private String extractRSSField(String item, Pattern pattern) {
+        Matcher matcher = pattern.matcher(item);
+        if (matcher.find()) {
+            // Try CDATA group first, then regular group
+            String result = matcher.group(1);
+            if (result == null || result.isEmpty()) {
+                result = matcher.group(2);
+            }
+            return result;
+        }
+        return null;
+    }
+
+    private LocalDateTime parseRSSDate(String dateStr) {
+        try {
+            // Common RSS date formats
+            List<DateTimeFormatter> formatters = Arrays.asList(
+                DateTimeFormatter.RFC_1123_DATE_TIME,
+                DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss Z", Locale.ENGLISH),
+                DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss z", Locale.ENGLISH),
+                DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'"),
+                DateTimeFormatter.ISO_DATE_TIME
+            );
+
+            for (DateTimeFormatter formatter : formatters) {
+                try {
+                    ZonedDateTime zdt = ZonedDateTime.parse(dateStr.trim(), formatter);
+                    return zdt.toLocalDateTime();
+                } catch (Exception ignored) {}
+            }
+
+            // Try simple parsing
+            return LocalDateTime.now();
+
+        } catch (Exception e) {
+            return LocalDateTime.now();
+        }
+    }
+
+    private List<NewsArticle> parseFinvizHTML(String html, String ticker) {
+        List<NewsArticle> articles = new ArrayList<>();
+
+        try {
+            // Find news table - look for news links in the page
+            Pattern newsPattern = Pattern.compile("<a[^>]+href=\"(https?://[^\"]+)\"[^>]*class=\"tab-link-news\"[^>]*>(.*?)</a>", Pattern.DOTALL);
+            Pattern newsRowPattern = Pattern.compile("<tr class=\"cursor-pointer[^\"]*\"[^>]*>(.*?)</tr>", Pattern.DOTALL);
+            Pattern linkInRowPattern = Pattern.compile("<a[^>]+href=\"(https?://[^\"]+)\"[^>]*>(.*?)</a>", Pattern.DOTALL);
+            Pattern timePattern = Pattern.compile("<td[^>]*>(\\w{3}-\\d{1,2}-\\d{2}|\\d{1,2}:\\d{2}[AP]M|Today|Yesterday)</td>", Pattern.DOTALL);
+
+            // Try to find news table rows
+            Matcher rowMatcher = newsRowPattern.matcher(html);
+            int count = 0;
+
+            while (rowMatcher.find() && count < 15) {
+                String row = rowMatcher.group(1);
+
+                Matcher linkMatcher = linkInRowPattern.matcher(row);
+                if (linkMatcher.find()) {
+                    String url = linkMatcher.group(1);
+                    String title = linkMatcher.group(2).replaceAll("<[^>]+>", "").trim();
+
+                    if (title.length() > 10 && !url.contains("finviz.com")) {
+                        NewsArticle article = NewsArticle.builder()
+                                .ticker(ticker.toUpperCase())
+                                .title(cleanHtml(title))
+                                .content(cleanHtml(title))
+                                .url(url)
+                                .source("Finviz")
+                                .publishedAt(LocalDateTime.now().minusHours(count))
+                                .build();
+
+                        articles.add(article);
+                        count++;
+                    }
+                }
+            }
+
+            // Fallback: try alternate pattern for news links
+            if (articles.isEmpty()) {
+                Matcher newsMatcher = newsPattern.matcher(html);
+                count = 0;
+
+                while (newsMatcher.find() && count < 15) {
+                    String url = newsMatcher.group(1);
+                    String title = newsMatcher.group(2).replaceAll("<[^>]+>", "").trim();
+
+                    if (title.length() > 10) {
+                        NewsArticle article = NewsArticle.builder()
+                                .ticker(ticker.toUpperCase())
+                                .title(cleanHtml(title))
+                                .content(cleanHtml(title))
+                                .url(url)
+                                .source("Finviz")
+                                .publishedAt(LocalDateTime.now().minusHours(count))
+                                .build();
+
+                        articles.add(article);
+                        count++;
+                    }
+                }
+            }
+
+            log.info("Parsed {} articles from Finviz for {}", articles.size(), ticker);
+
+        } catch (Exception e) {
+            log.error("Error parsing Finviz HTML for {}: {}", ticker, e.getMessage());
+        }
+
+        return articles;
+    }
+
+    private String cleanHtml(String text) {
+        if (text == null) return "";
+        return text
+                .replaceAll("<[^>]+>", "")
+                .replaceAll("&amp;", "&")
+                .replaceAll("&lt;", "<")
+                .replaceAll("&gt;", ">")
+                .replaceAll("&quot;", "\"")
+                .replaceAll("&#39;", "'")
+                .replaceAll("&nbsp;", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
     }
     
     private LocalDateTime parseDateTime(String dateStr) {

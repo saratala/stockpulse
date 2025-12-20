@@ -15,9 +15,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -503,6 +502,94 @@ public class YahooFinanceService {
                 data.priceData = this.priceData;
                 return data;
             }
+        }
+    }
+    
+    /**
+     * Fetch historical data for a full year (2024)
+     */
+    public Optional<HistoricalData> fetchYearlyData(String ticker, int year) {
+        log.info("Fetching yearly data for ticker: {} for year: {}", ticker, year);
+        
+        try {
+            // Calculate period1 (start of year) and period2 (end of year)
+            long period1 = Instant.parse(year + "-01-01T00:00:00Z").getEpochSecond();
+            long period2 = Instant.parse(year + "-12-31T23:59:59Z").getEpochSecond();
+            
+            String url = yahooFinanceBaseUrl + "/v8/finance/chart/" + ticker + 
+                        "?interval=1d&period1=" + period1 + "&period2=" + period2;
+            
+            log.debug("Fetching from URL: {}", url);
+            
+            Mono<String> response = webClient.get()
+                .uri(url)
+                .retrieve()
+                .bodyToMono(String.class)
+                .timeout(Duration.ofMillis(timeout * 3)) // Longer timeout for historical data
+                .doOnError(error -> log.error("Error fetching yearly data for {}: {}", ticker, error.getMessage()));
+            
+            String jsonResponse = response.block();
+            if (jsonResponse == null) {
+                log.warn("No response received for yearly data: {}", ticker);
+                return Optional.empty();
+            }
+            
+            JsonNode jsonNode = objectMapper.readTree(jsonResponse);
+            JsonNode chart = jsonNode.path("chart");
+            
+            if (chart.isArray() && chart.size() > 0) {
+                JsonNode result = chart.get(0).path("result");
+                if (result.isArray() && result.size() > 0) {
+                    JsonNode data = result.get(0);
+                    JsonNode timestamps = data.path("timestamp");
+                    JsonNode indicators = data.path("indicators").path("quote");
+                    
+                    if (indicators.isArray() && indicators.size() > 0) {
+                        JsonNode quote = indicators.get(0);
+                        JsonNode opens = quote.path("open");
+                        JsonNode highs = quote.path("high");
+                        JsonNode lows = quote.path("low");
+                        JsonNode closes = quote.path("close");
+                        JsonNode volumes = quote.path("volume");
+                        
+                        Map<LocalDateTime, HistoricalData.PriceData> priceDataMap = new HashMap<>();
+                        
+                        for (int i = 0; i < timestamps.size(); i++) {
+                            if (!opens.get(i).isNull() && !closes.get(i).isNull()) {
+                                LocalDateTime dateTime = LocalDateTime.ofInstant(
+                                    Instant.ofEpochSecond(timestamps.get(i).asLong()),
+                                    ZoneId.systemDefault()
+                                );
+                                
+                                HistoricalData.PriceData priceData = HistoricalData.PriceData.builder()
+                                    .open(BigDecimal.valueOf(opens.get(i).asDouble()))
+                                    .high(BigDecimal.valueOf(highs.get(i).asDouble()))
+                                    .low(BigDecimal.valueOf(lows.get(i).asDouble()))
+                                    .close(BigDecimal.valueOf(closes.get(i).asDouble()))
+                                    .volume(volumes.get(i).asLong())
+                                    .build();
+                                
+                                priceDataMap.put(dateTime, priceData);
+                            }
+                        }
+                        
+                        log.info("Successfully fetched {} data points for {} in {}", 
+                                priceDataMap.size(), ticker, year);
+                        
+                        return Optional.of(HistoricalData.builder()
+                            .ticker(ticker)
+                            .priceData(priceDataMap)
+                            .build());
+                    }
+                }
+            }
+            
+            log.warn("No valid data found in response for: {}", ticker);
+            return Optional.empty();
+            
+        } catch (Exception e) {
+            log.error("Error fetching yearly data for ticker: {}", ticker, e);
+            return Optional.empty();
         }
     }
 }

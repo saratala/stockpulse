@@ -57,4 +57,8 @@ public interface SignalPredictionRepository extends JpaRepository<SignalPredicti
     
     @Query("SELECT AVG(sp.sentimentScore) FROM SignalPrediction sp WHERE sp.ticker = :ticker AND sp.sentimentScore IS NOT NULL AND sp.timestamp >= :startDate")
     BigDecimal findAverageSentimentByTickerSince(@Param("ticker") String ticker, @Param("startDate") LocalDateTime startDate);
+
+    @Query("SELECT sp FROM SignalPrediction sp WHERE sp.timestamp >= :startDate AND sp.timestamp <= :endDate ORDER BY sp.timestamp DESC")
+    List<SignalPrediction> findByTimestampBetweenOrderByTimestampDesc(@Param("startDate") LocalDateTime startDate,
+                                                                       @Param("endDate") LocalDateTime endDate);
 }

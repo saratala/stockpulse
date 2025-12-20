@@ -1,6 +1,7 @@
 import { StockPrediction, SentimentData } from '../types';
 
-const API_BASE_URL = 'http://localhost:8181/api/v1';
+// Use relative URL - works with proxy in development and correctly in production
+const API_BASE_URL = '/api/v1';
 
 export const fetchLatestPredictions = async (): Promise<StockPrediction[]> => {
   const response = await fetch(`${API_BASE_URL}/predictions`);
@@ -108,7 +109,7 @@ export const fetchAllTickers = async () => {
 };
 
 export const fetchHealthStatus = async () => {
-  const response = await fetch(`${API_BASE_URL}/actuator/health`);
+  const response = await fetch(`${API_BASE_URL}/health`);
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
   return response.json();
 };
@@ -124,7 +125,7 @@ export const fetchScreeningResults = async (params?: {
   if (params?.maxResults) searchParams.append('maxResults', params.maxResults.toString());
   if (params?.includeSignals !== undefined) searchParams.append('includeSignals', params.includeSignals.toString());
   
-  const response = await fetch(`${API_BASE_URL}/screening/run?${searchParams}`);
+  const response = await fetch(`${API_BASE_URL}/screener/run?${searchParams}`);
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
   return response.json();
 };
@@ -206,6 +207,51 @@ export const fetchPredictionSummary = async (hours = 24) => {
 
 export const fetchTickerPredictions = async (ticker: string, hours = 168) => {
   const response = await fetch(`${API_BASE_URL}/predictions/ticker/${ticker}?hours=${hours}`);
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+// Prediction Validation API Functions
+export const fetchValidationAccuracy = async (days = 7) => {
+  const response = await fetch(`${API_BASE_URL}/validation/accuracy?days=${days}`);
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+export const fetchTickerValidationAccuracy = async (ticker: string, days = 30) => {
+  const response = await fetch(`${API_BASE_URL}/validation/accuracy/${ticker.toUpperCase()}?days=${days}`);
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+export const fetchValidationRankings = async (timeframe = '1d', days = 30) => {
+  const response = await fetch(`${API_BASE_URL}/validation/rankings?timeframe=${timeframe}&days=${days}`);
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+export const fetchRecentValidations = async (limit = 50) => {
+  const response = await fetch(`${API_BASE_URL}/validation/recent?limit=${limit}`);
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+export const fetchValidationDashboard = async (days = 7) => {
+  const response = await fetch(`${API_BASE_URL}/validation/dashboard?days=${days}`);
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+export const fetchPaperTradingStats = async () => {
+  const response = await fetch(`${API_BASE_URL}/validation/paper-trading`);
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return response.json();
+};
+
+export const triggerValidationRun = async () => {
+  const response = await fetch(`${API_BASE_URL}/validation/run`, {
+    method: 'POST',
+  });
   if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
   return response.json();
 };

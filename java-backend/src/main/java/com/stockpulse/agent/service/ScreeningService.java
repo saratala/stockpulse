@@ -21,7 +21,6 @@ public class ScreeningService {
     
     private final ScreeningResultRepository screeningResultRepository;
     
-    @Cacheable(value = "screening-results", key = "#minScore + '_' + #maxResults")
     public ScreeningResponse runStockScreener(int minScore, int maxResults, boolean includeSignals) {
         log.info("Running stock screener with minScore={}, maxResults={}, includeSignals={}", 
                 minScore, maxResults, includeSignals);

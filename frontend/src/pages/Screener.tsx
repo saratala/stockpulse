@@ -1,18 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Search, 
-  Filter, 
-  TrendingUp, 
-  TrendingDown, 
-  BarChart3,
+import {
+  Search,
+  TrendingUp,
+  TrendingDown,
   RefreshCw,
   Settings,
-  ChevronDown,
-  Star,
   AlertCircle,
   Activity,
-  Zap,
   X
 } from 'lucide-react';
 import GlassContainer from '../components/GlassContainer';
@@ -27,40 +22,39 @@ interface ScreeningResult {
   name: string;
   sector: string;
   price: number;
-  screening_score: number;
-  passes_all_screens?: boolean;
-  ema_stack_aligned?: boolean;
-  adx_strength?: number;
-  stoch_position?: number;
+  screeningScore: number;
+  passesAllScreens?: boolean;
+  emaStackAligned?: boolean;
+  adxStrength?: number;
+  stochPosition?: number;
   rsi?: number;
-  volume_ratio?: number;
-  change_percent?: number;
-  signal_analysis?: {
+  volumeRatio?: number;
+  changePercent?: number;
+  signalAnalysis?: {
     ticker: string;
-    primary_signal: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
-    primary_confidence: number;
-    reversal_signal?: string;
-    reversal_confidence?: number;
-    risk_level?: string;
-    key_levels?: {
+    primarySignal: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+    primaryConfidence: number;
+    reversalSignal?: string;
+    reversalConfidence?: number;
+    riskLevel?: string;
+    keyLevels?: {
       support: number;
       resistance: number;
       pivot: number;
     };
-    primary_reasons?: string[];
+    primaryReasons?: string[];
   };
 }
 
 interface ScreeningData {
-  screening_date: string;
-  total_analyzed: number;
-  candidates_found: number;
+  screeningDate: string;
+  totalAnalyzed: number;
+  candidatesFound: number;
   candidates: ScreeningResult[];
-  screening_summary: {
-    ema_stack: number;
-    momentum: number;
-    volume: number;
-    fundamental: number;
+  screeningSummary: {
+    strongBuy: number;
+    buy: number;
+    hold: number;
   };
 }
 
@@ -69,18 +63,17 @@ const Screener: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState({
-    minScore: 70,
+    minScore: 0,
     includeSignals: true,
-    maxResults: 50,
+    maxResults: 100,
     signalType: 'all' as 'all' | 'bullish' | 'bearish'
   });
   const [activeFilter, setActiveFilter] = useState<'all' | 'bullish' | 'bearish'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
-  const [selectedTab, setSelectedTab] = useState<'all' | 'signals' | 'screened'>('all');
   const [refreshing, setRefreshing] = useState(false);
 
-  const API_BASE_URL = 'http://localhost:8000';
+  const API_BASE_URL = '/api/v1';
 
   const fetchScreeningData = useCallback(async (showRefreshSpinner = false) => {
     try {
@@ -92,9 +85,9 @@ const Screener: React.FC = () => {
       setError(null);
 
       const params = new URLSearchParams({
-        min_score: filters.minScore.toString(),
-        max_results: filters.maxResults.toString(),
-        include_signals: filters.includeSignals.toString()
+        minScore: filters.minScore.toString(),
+        maxResults: filters.maxResults.toString(),
+        includeSignals: filters.includeSignals.toString()
       });
 
       const response = await fetch(`${API_BASE_URL}/screener/run?${params}`);
@@ -134,21 +127,13 @@ const Screener: React.FC = () => {
     }
 
     // Signal type filter
-    if (activeFilter !== 'all' && candidate.signal_analysis) {
-      if (activeFilter === 'bullish' && candidate.signal_analysis.primary_signal !== 'BULLISH') {
+    if (activeFilter !== 'all' && candidate.signalAnalysis) {
+      if (activeFilter === 'bullish' && candidate.signalAnalysis.primarySignal !== 'BULLISH') {
         return false;
       }
-      if (activeFilter === 'bearish' && candidate.signal_analysis.primary_signal !== 'BEARISH') {
+      if (activeFilter === 'bearish' && candidate.signalAnalysis.primarySignal !== 'BEARISH') {
         return false;
       }
-    }
-
-    // Tab filter
-    if (selectedTab === 'signals' && (!candidate.signal_analysis || candidate.signal_analysis.primary_signal === 'NEUTRAL')) {
-      return false;
-    }
-    if (selectedTab === 'screened' && !candidate.passes_all_screens && !candidate.ema_stack_aligned) {
-      return false;
     }
 
     return true;
@@ -156,17 +141,17 @@ const Screener: React.FC = () => {
 
   const getSignalCounts = () => {
     if (!screeningData?.candidates) return { bullish: 0, bearish: 0, neutral: 0 };
-    
+
     const counts = { bullish: 0, bearish: 0, neutral: 0 };
     screeningData.candidates.forEach(candidate => {
-      if (candidate.signal_analysis) {
-        const signal = candidate.signal_analysis.primary_signal.toLowerCase();
+      if (candidate.signalAnalysis) {
+        const signal = candidate.signalAnalysis.primarySignal.toLowerCase();
         if (signal === 'bullish') counts.bullish++;
         else if (signal === 'bearish') counts.bearish++;
         else counts.neutral++;
       }
     });
-    
+
     return counts;
   };
 
@@ -242,7 +227,7 @@ const Screener: React.FC = () => {
                   }`}
                 >
                   <div className="text-xl md:text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
-                    {screeningData.total_analyzed}
+                    {screeningData.totalAnalyzed}
                   </div>
                   <div className="text-xs md:text-sm" style={{ color: 'var(--text-tertiary)' }}>Analyzed</div>
                 </button>
@@ -388,31 +373,6 @@ const Screener: React.FC = () => {
           </div>
         </GlassContainer>
 
-        {/* Tabs */}
-        <GlassContainer className="mb-6">
-          <div className="p-4">
-            <div className="flex space-x-1">
-              {[
-                { key: 'all', label: 'All', icon: BarChart3 },
-                { key: 'signals', label: 'Signals', icon: Zap },
-                { key: 'screened', label: 'Screened', icon: Filter }
-              ].map(({ key, label, icon: Icon }) => (
-                <button
-                  key={key}
-                  onClick={() => setSelectedTab(key as any)}
-                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl transition-all duration-300 ${
-                    selectedTab === key
-                      ? 'bg-white/20 backdrop-blur-md border border-white/30'
-                      : 'bg-white/5 hover:bg-white/10'
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span className="text-sm font-medium">{label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </GlassContainer>
       </div>
 
       {/* Content */}
@@ -430,23 +390,11 @@ const Screener: React.FC = () => {
           </GlassContainer>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-            <AnimatePresence mode="popLayout">
               {filteredCandidates.map((candidate, index) => (
-                <motion.div
-                  key={`${candidate.ticker}-${index}`}
-                  initial={{ opacity: 0, y: 20, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: -20, scale: 0.95 }}
-                  transition={{
-                    duration: 0.4,
-                    delay: index * 0.03,
-                    ease: [0.25, 0.8, 0.25, 1]
-                  }}
-                >
+                <div key={`${candidate.ticker}-${index}`}>
                   <SignalCard candidate={candidate} index={index} />
-                </motion.div>
+                </div>
               ))}
-            </AnimatePresence>
             
             {filteredCandidates.length === 0 && !loading && (
               <GlassContainer className="text-center py-12">

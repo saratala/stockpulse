@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS stocks (
     name TEXT NOT NULL,
     sector TEXT,
     industry TEXT,
+    market_cap BIGINT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -98,18 +99,20 @@ CREATE TABLE IF NOT EXISTS news_articles (
 CREATE TABLE IF NOT EXISTS sentiment_scores (
     id SERIAL PRIMARY KEY,
     ticker TEXT NOT NULL REFERENCES stocks(ticker),
-    article_id INTEGER REFERENCES news_articles(id),
-    sentiment_score DOUBLE PRECISION NOT NULL,
+    article_id BIGINT REFERENCES news_articles(id),
+    news_article_id BIGINT,
+    sentiment_score NUMERIC(5,3) NOT NULL,
     polarity TEXT NOT NULL,
     content TEXT,
+    reasoning TEXT,
+    analysis_provider TEXT,
     source TEXT NOT NULL,
     published_at TIMESTAMPTZ NOT NULL,
-    confidence DOUBLE PRECISION NOT NULL,
+    confidence NUMERIC(5,3) NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT sentiment_score_range CHECK (sentiment_score >= -1 AND sentiment_score <= 1),
     CONSTRAINT polarity_values CHECK (polarity IN ('positive', 'neutral', 'negative')),
-    CONSTRAINT confidence_range CHECK (confidence >= 0 AND confidence <= 1),
-    CONSTRAINT sentiment_article_unique UNIQUE (article_id)
+    CONSTRAINT confidence_range CHECK (confidence >= 0 AND confidence <= 1)
 );
 
 -- -------------------------
@@ -134,9 +137,10 @@ CREATE TABLE IF NOT EXISTS predictions (
 -- Table: signal_predictions (time-series hypertable for 5-minute predictions)
 -- -------------------------
 CREATE TABLE IF NOT EXISTS signal_predictions (
-    id SERIAL PRIMARY KEY,
+    id SERIAL NOT NULL,
     ticker TEXT NOT NULL REFERENCES stocks(ticker),
     timestamp TIMESTAMPTZ NOT NULL,
+    PRIMARY KEY (id, timestamp),
     current_price DOUBLE PRECISION NOT NULL,
     signal_type TEXT NOT NULL,
     confidence DOUBLE PRECISION NOT NULL,
@@ -209,3 +213,174 @@ SELECT add_compression_policy('signal_predictions', INTERVAL '1 day');
 SELECT add_retention_policy('stock_prices', INTERVAL '5 years');
 SELECT add_retention_policy('technicals', INTERVAL '5 years');
 SELECT add_retention_policy('signal_predictions', INTERVAL '1 year');
+
+-- -------------------------
+-- Table: prediction_validations (tracks predicted vs actual outcomes)
+-- -------------------------
+CREATE TABLE IF NOT EXISTS prediction_validations (
+    id SERIAL NOT NULL,
+    ticker TEXT NOT NULL REFERENCES stocks(ticker),
+    prediction_timestamp TIMESTAMPTZ NOT NULL,
+    validation_timestamp TIMESTAMPTZ NOT NULL,
+    timeframe TEXT NOT NULL, -- '1h', '1d', '1w'
+
+    -- Original prediction data
+    signal_type TEXT NOT NULL,
+    predicted_price DOUBLE PRECISION NOT NULL,
+    prediction_price DOUBLE PRECISION NOT NULL, -- price when prediction was made
+    confidence DOUBLE PRECISION NOT NULL,
+
+    -- Actual outcome
+    actual_price DOUBLE PRECISION NOT NULL,
+
+    -- Calculated metrics
+    predicted_change_percent DOUBLE PRECISION NOT NULL,
+    actual_change_percent DOUBLE PRECISION NOT NULL,
+    price_error DOUBLE PRECISION NOT NULL, -- absolute error in dollars
+    price_error_percent DOUBLE PRECISION NOT NULL, -- percentage error
+    direction_correct BOOLEAN NOT NULL, -- did we get the direction right?
+    within_5_percent BOOLEAN NOT NULL, -- was prediction within 5% of actual?
+    within_10_percent BOOLEAN NOT NULL, -- was prediction within 10% of actual?
+
+    PRIMARY KEY (id, validation_timestamp),
+    CONSTRAINT timeframe_values CHECK (timeframe IN ('1h', '1d', '1w')),
+    CONSTRAINT signal_type_values CHECK (signal_type IN ('BULLISH', 'BEARISH', 'NEUTRAL')),
+    CONSTRAINT confidence_range CHECK (confidence >= 0 AND confidence <= 100),
+    CONSTRAINT positive_prices CHECK (predicted_price > 0 AND prediction_price > 0 AND actual_price > 0)
+);
+
+-- Convert to hypertable
+SELECT create_hypertable('prediction_validations', 'validation_timestamp',
+    chunk_time_interval => INTERVAL '1 week',
+    if_not_exists => TRUE
+);
+
+-- Create indexes for validation queries
+CREATE INDEX IF NOT EXISTS idx_pred_val_ticker_time ON prediction_validations (ticker, validation_timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_pred_val_timeframe ON prediction_validations (timeframe, validation_timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_pred_val_direction ON prediction_validations (direction_correct, timeframe);
+CREATE INDEX IF NOT EXISTS idx_pred_val_confidence ON prediction_validations (confidence DESC, direction_correct);
+
+-- -------------------------
+-- Table: prediction_accuracy_daily (aggregated daily accuracy metrics)
+-- -------------------------
+CREATE TABLE IF NOT EXISTS prediction_accuracy_daily (
+    id SERIAL NOT NULL,
+    date DATE NOT NULL,
+    ticker TEXT, -- NULL for overall metrics
+    timeframe TEXT NOT NULL,
+
+    -- Count metrics
+    total_predictions INTEGER NOT NULL DEFAULT 0,
+    correct_direction INTEGER NOT NULL DEFAULT 0,
+    within_5_percent INTEGER NOT NULL DEFAULT 0,
+    within_10_percent INTEGER NOT NULL DEFAULT 0,
+
+    -- Accuracy percentages
+    direction_accuracy DOUBLE PRECISION NOT NULL DEFAULT 0,
+    accuracy_5_percent DOUBLE PRECISION NOT NULL DEFAULT 0,
+    accuracy_10_percent DOUBLE PRECISION NOT NULL DEFAULT 0,
+
+    -- Error metrics
+    avg_error_percent DOUBLE PRECISION NOT NULL DEFAULT 0,
+    max_error_percent DOUBLE PRECISION NOT NULL DEFAULT 0,
+    min_error_percent DOUBLE PRECISION NOT NULL DEFAULT 0,
+
+    -- Confidence calibration
+    avg_confidence DOUBLE PRECISION NOT NULL DEFAULT 0,
+    confidence_calibration DOUBLE PRECISION, -- how well confidence matches actual accuracy
+
+    -- By signal type
+    bullish_count INTEGER NOT NULL DEFAULT 0,
+    bullish_correct INTEGER NOT NULL DEFAULT 0,
+    bearish_count INTEGER NOT NULL DEFAULT 0,
+    bearish_correct INTEGER NOT NULL DEFAULT 0,
+
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+
+    PRIMARY KEY (id),
+    UNIQUE (date, ticker, timeframe),
+    CONSTRAINT timeframe_values CHECK (timeframe IN ('1h', '1d', '1w', 'all'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_accuracy_date ON prediction_accuracy_daily (date DESC);
+CREATE INDEX IF NOT EXISTS idx_accuracy_ticker ON prediction_accuracy_daily (ticker, date DESC);
+
+-- -------------------------
+-- Table: paper_trades (simulated trading for validation)
+-- -------------------------
+CREATE TABLE IF NOT EXISTS paper_trades (
+    id SERIAL PRIMARY KEY,
+    ticker TEXT NOT NULL REFERENCES stocks(ticker),
+    signal_prediction_id INTEGER NOT NULL,
+
+    -- Trade details
+    trade_type TEXT NOT NULL, -- 'BUY' or 'SELL'
+    entry_price DOUBLE PRECISION NOT NULL,
+    entry_timestamp TIMESTAMPTZ NOT NULL,
+    target_price DOUBLE PRECISION,
+    stop_loss_price DOUBLE PRECISION,
+
+    -- Position sizing
+    position_size INTEGER NOT NULL DEFAULT 100, -- shares
+    position_value DOUBLE PRECISION NOT NULL,
+
+    -- Exit details (NULL until closed)
+    exit_price DOUBLE PRECISION,
+    exit_timestamp TIMESTAMPTZ,
+    exit_reason TEXT, -- 'TARGET_HIT', 'STOP_LOSS', 'TIME_EXPIRED', 'MANUAL'
+
+    -- P&L
+    realized_pnl DOUBLE PRECISION,
+    realized_pnl_percent DOUBLE PRECISION,
+
+    -- Status
+    status TEXT NOT NULL DEFAULT 'OPEN', -- 'OPEN', 'CLOSED', 'CANCELLED'
+
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+
+    CONSTRAINT trade_type_values CHECK (trade_type IN ('BUY', 'SELL')),
+    CONSTRAINT status_values CHECK (status IN ('OPEN', 'CLOSED', 'CANCELLED')),
+    CONSTRAINT positive_prices CHECK (entry_price > 0 AND position_size > 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_paper_trades_ticker ON paper_trades (ticker, entry_timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_paper_trades_status ON paper_trades (status, entry_timestamp DESC);
+
+-- -------------------------
+-- Table: paper_trading_account (track overall paper trading performance)
+-- -------------------------
+CREATE TABLE IF NOT EXISTS paper_trading_account (
+    id SERIAL PRIMARY KEY,
+    account_name TEXT NOT NULL DEFAULT 'default',
+
+    -- Account balance
+    initial_balance DOUBLE PRECISION NOT NULL DEFAULT 100000,
+    current_balance DOUBLE PRECISION NOT NULL DEFAULT 100000,
+
+    -- Performance metrics
+    total_trades INTEGER NOT NULL DEFAULT 0,
+    winning_trades INTEGER NOT NULL DEFAULT 0,
+    losing_trades INTEGER NOT NULL DEFAULT 0,
+
+    -- P&L
+    total_realized_pnl DOUBLE PRECISION NOT NULL DEFAULT 0,
+    total_unrealized_pnl DOUBLE PRECISION NOT NULL DEFAULT 0,
+
+    -- Risk metrics
+    max_drawdown DOUBLE PRECISION NOT NULL DEFAULT 0,
+    max_drawdown_percent DOUBLE PRECISION NOT NULL DEFAULT 0,
+    peak_balance DOUBLE PRECISION NOT NULL DEFAULT 100000,
+
+    -- Dates
+    started_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+
+    UNIQUE (account_name)
+);
+
+-- Insert default paper trading account
+INSERT INTO paper_trading_account (account_name, initial_balance, current_balance)
+VALUES ('default', 100000, 100000)
+ON CONFLICT (account_name) DO NOTHING;

@@ -4,11 +4,13 @@ import { SchedulerStatus } from '../components/SchedulerStatus';
 import GlassContainer from '../components/GlassContainer';
 import GlassButton from '../components/GlassButton';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { 
-  fetchAllTickers, 
-  fetchSentimentSummary, 
+import { RealTimeConnectionStatus } from '../components/RealTimePriceIndicator';
+import { useRealTimePrices } from '../hooks/useRealTimePrices';
+import {
+  fetchAllTickers,
+  fetchSentimentSummary,
   fetchLatestPredictions,
-  fetchHealthStatus 
+  fetchHealthStatus
 } from '../services/api';
 
 const Dashboard = () => {
@@ -17,6 +19,11 @@ const Dashboard = () => {
   const [predictions, setPredictions] = useState<any[]>([]);
   const [healthStatus, setHealthStatus] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Real-time price streaming
+  const { prices, isConnected, subscribedCount, subscribeAll } = useRealTimePrices({
+    autoSubscribe: false,
+  });
 
   useEffect(() => {
     const loadDashboardData = async () => {
@@ -62,18 +69,25 @@ const Dashboard = () => {
       color: 'from-blue-500 to-cyan-500'
     },
     {
-      title: 'LLM Sentiment',
-      description: 'AI-powered sentiment analysis',
-      path: '/llm-sentiment',
+      title: 'AI Analysis',
+      description: 'AI-powered stock analysis',
+      path: '/ai-analysis',
       icon: '🧠',
       color: 'from-purple-500 to-pink-500'
     },
     {
-      title: 'Predictions',
-      description: 'Latest ML predictions',
-      path: '/predictions',
-      icon: '🎯',
+      title: 'Backtesting',
+      description: 'Test trading strategies',
+      path: '/backtesting',
+      icon: '📊',
       color: 'from-green-500 to-emerald-500'
+    },
+    {
+      title: 'History',
+      description: 'View signal history',
+      path: '/predictions-history',
+      icon: '📈',
+      color: 'from-orange-500 to-amber-500'
     }
   ];
 
@@ -127,9 +141,17 @@ const Dashboard = () => {
                   </span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-gray-400">Data Sources</span>
-                  <span className="text-white font-medium">Java Backend</span>
+                  <span className="text-gray-400">Real-Time Feed</span>
+                  <RealTimeConnectionStatus isConnected={isConnected} subscribedCount={subscribedCount} />
                 </div>
+                {!isConnected && (
+                  <button
+                    onClick={subscribeAll}
+                    className="w-full mt-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg text-sm hover:brightness-110 transition-all"
+                  >
+                    Enable Live Streaming
+                  </button>
+                )}
               </div>
             </GlassContainer>
 
@@ -185,20 +207,45 @@ const Dashboard = () => {
             </GlassContainer>
           </div>
 
-          {/* Featured Tickers */}
+          {/* Featured Tickers with Real-Time Prices */}
           {tickers.length > 0 && (
             <GlassContainer className="p-6">
-              <h3 className="text-xl font-semibold text-white mb-4">Featured Tickers</h3>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-semibold text-white">Featured Tickers</h3>
+                {isConnected && (
+                  <span className="flex items-center gap-2 text-xs text-green-400">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                    </span>
+                    LIVE
+                  </span>
+                )}
+              </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
-                {tickers.slice(0, 8).map((ticker) => (
-                  <Link 
-                    key={ticker} 
-                    to={`/analysis/${ticker}`}
-                    className="bg-gray-800/50 rounded-lg p-3 text-center hover:bg-gray-700/50 transition-colors"
-                  >
-                    <div className="text-white font-medium">{ticker}</div>
-                  </Link>
-                ))}
+                {tickers.slice(0, 8).map((ticker) => {
+                  const livePrice = prices[ticker];
+                  const isPositive = livePrice?.change >= 0;
+                  return (
+                    <Link
+                      key={ticker}
+                      to={`/analysis/${ticker}`}
+                      className="bg-gray-800/50 rounded-lg p-3 text-center hover:bg-gray-700/50 transition-colors"
+                    >
+                      <div className="text-white font-medium">{ticker}</div>
+                      {livePrice && (
+                        <>
+                          <div className="text-sm text-gray-300 font-mono mt-1">
+                            ${livePrice.price.toFixed(2)}
+                          </div>
+                          <div className={`text-xs font-mono ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
+                            {isPositive ? '+' : ''}{livePrice.changePercent.toFixed(2)}%
+                          </div>
+                        </>
+                      )}
+                    </Link>
+                  );
+                })}
               </div>
             </GlassContainer>
           )}

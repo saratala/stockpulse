@@ -386,4 +386,78 @@ public class RealTimeDataService {
             return HeikinAshiSignal.RiskLevel.LOW;
         }
     }
+    
+    @Transactional
+    public int fetchHistoricalData(String period, String interval) {
+        log.info("Fetching historical data for period: {}, interval: {}", period, interval);
+        
+        // For now, just return 0 as we're using existing data
+        // This would be implemented when we add proper historical data fetching
+        log.info("Using existing data for backtesting");
+        return 0;
+    }
+    
+    @Transactional
+    public int loadYearlyData(int year) {
+        log.info("Loading yearly historical data for year: {}", year);
+        
+        List<String> tickers = getActiveTickers();
+        int totalRecords = 0;
+        
+        for (String ticker : tickers) {
+            try {
+                log.info("Fetching yearly data for ticker: {}", ticker);
+                Optional<YahooFinanceService.HistoricalData> historicalDataOpt = 
+                    yahooFinanceService.fetchYearlyData(ticker, year);
+                
+                if (historicalDataOpt.isPresent()) {
+                    YahooFinanceService.HistoricalData historicalData = historicalDataOpt.get();
+                    
+                    // Convert and save each day's data
+                    for (Map.Entry<LocalDateTime, YahooFinanceService.HistoricalData.PriceData> entry : 
+                         historicalData.getPriceData().entrySet()) {
+                        
+                        LocalDateTime date = entry.getKey();
+                        YahooFinanceService.HistoricalData.PriceData priceData = entry.getValue();
+                        
+                        // Check if record already exists to avoid duplicates
+                        Optional<StockPrice> existing = stockPriceRepository
+                            .findByTickerAndDateBetween(ticker, 
+                                date.minusMinutes(30), date.plusMinutes(30))
+                            .stream().findFirst();
+                        
+                        if (existing.isEmpty()) {
+                            StockPrice stockPrice = StockPrice.builder()
+                                .ticker(ticker)
+                                .date(date)
+                                .open(priceData.getOpen())
+                                .high(priceData.getHigh())
+                                .low(priceData.getLow())
+                                .close(priceData.getClose())
+                                .volume(priceData.getVolume())
+                                .adjustedClose(priceData.getClose())
+                                .build();
+                            
+                            stockPriceRepository.save(stockPrice);
+                            totalRecords++;
+                        }
+                    }
+                    
+                    log.info("Loaded {} records for ticker: {}", 
+                            historicalData.getPriceData().size(), ticker);
+                } else {
+                    log.warn("No historical data found for ticker: {}", ticker);
+                }
+                
+                // Add small delay to avoid rate limiting
+                Thread.sleep(1000);
+                
+            } catch (Exception e) {
+                log.error("Error loading yearly data for ticker: {}", ticker, e);
+            }
+        }
+        
+        log.info("Successfully loaded {} total historical records for year {}", totalRecords, year);
+        return totalRecords;
+    }
 }

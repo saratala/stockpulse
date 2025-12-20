@@ -2,6 +2,7 @@
   "name": "stockpulse-frontend",
   "version": "0.1.0",
   "private": true,
+  "proxy": "http://stockpulse-java-final:8181",
   "dependencies": {
     "@types/node": "^18.15.0",
     "@types/react": "^18.0.28",

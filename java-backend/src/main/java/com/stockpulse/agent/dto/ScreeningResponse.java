@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.AllArgsConstructor;
 import lombok.NoArgsConstructor;
 
+import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -13,7 +14,7 @@ import java.util.Map;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class ScreeningResponse {
+public class ScreeningResponse implements Serializable {
     private String screeningDate;
     private Integer totalAnalyzed;
     private Integer candidatesFound;
@@ -24,7 +25,7 @@ public class ScreeningResponse {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-    public static class ScreeningSummary {
+    public static class ScreeningSummary implements Serializable {
         private Long strongBuy;
         private Long buy;
         private Long hold;
@@ -34,7 +35,7 @@ public class ScreeningResponse {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-    public static class ScreeningCandidate {
+    public static class ScreeningCandidate implements Serializable {
         private String ticker;
         private String name;
         private String sector;
@@ -54,7 +55,7 @@ public class ScreeningResponse {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-    public static class SignalAnalysis {
+    public static class SignalAnalysis implements Serializable {
         private String ticker;
         private String primarySignal;
         private Double primaryConfidence;
@@ -68,7 +69,7 @@ public class ScreeningResponse {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-    public static class KeyLevels {
+    public static class KeyLevels implements Serializable {
         private Double support;
         private Double resistance;
         private Double pivot;

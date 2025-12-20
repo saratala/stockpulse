@@ -28,35 +28,35 @@ interface SignalCardProps {
     name: string;
     sector: string;
     price?: number;
-    current_price?: number;
-    screening_score: number;
-    passes_all_screens?: boolean;
-    ema_stack_aligned?: boolean;
-    adx_strength?: number;
-    stoch_position?: number;
+    currentPrice?: number;
+    screeningScore: number;
+    passesAllScreens?: boolean;
+    emaStackAligned?: boolean;
+    adxStrength?: number;
+    stochPosition?: number;
     rsi?: number;
-    volume_ratio?: number;
-    change_percent?: number;
-    signal_analysis?: {
+    volumeRatio?: number;
+    changePercent?: number;
+    signalAnalysis?: {
       ticker: string;
-      primary_signal: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
-      primary_confidence: number;
-      reversal_signal?: string;
-      reversal_confidence?: number;
-      risk_level?: string;
-      key_levels?: {
+      primarySignal: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+      primaryConfidence: number;
+      reversalSignal?: string;
+      reversalConfidence?: number;
+      riskLevel?: string;
+      keyLevels?: {
         support: number;
         resistance: number;
         pivot: number;
       };
-      primary_reasons?: string[];
+      primaryReasons?: string[];
     };
   };
   index?: number;
 }
 
 const SignalCard: React.FC<SignalCardProps> = ({ candidate, index = 0 }) => {
-  const currentPrice = candidate.current_price || candidate.price || 0;
+  const currentPrice = candidate.currentPrice || candidate.price || 0;
   const [expanded, setExpanded] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [showPopup, setShowPopup] = useState(false);
@@ -112,8 +112,8 @@ const SignalCard: React.FC<SignalCardProps> = ({ candidate, index = 0 }) => {
   };
   
   const getSignalVariant = () => {
-    if (!candidate.signal_analysis) return 'neutral';
-    switch (candidate.signal_analysis.primary_signal) {
+    if (!candidate.signalAnalysis) return 'neutral';
+    switch (candidate.signalAnalysis.primarySignal) {
       case 'BULLISH':
         return 'bullish';
       case 'BEARISH':
@@ -124,8 +124,8 @@ const SignalCard: React.FC<SignalCardProps> = ({ candidate, index = 0 }) => {
   };
 
   const getSignalIcon = () => {
-    if (!candidate.signal_analysis) return <Minus className="w-5 h-5" />;
-    switch (candidate.signal_analysis.primary_signal) {
+    if (!candidate.signalAnalysis) return <Minus className="w-5 h-5" />;
+    switch (candidate.signalAnalysis.primarySignal) {
       case 'BULLISH':
         return <TrendingUp className="w-5 h-5" />;
       case 'BEARISH':
@@ -136,8 +136,8 @@ const SignalCard: React.FC<SignalCardProps> = ({ candidate, index = 0 }) => {
   };
 
   const getSignalColor = () => {
-    if (!candidate.signal_analysis) return 'text-orange-500';
-    switch (candidate.signal_analysis.primary_signal) {
+    if (!candidate.signalAnalysis) return 'text-orange-500';
+    switch (candidate.signalAnalysis.primarySignal) {
       case 'BULLISH':
         return 'text-green-800';
       case 'BEARISH':
@@ -148,8 +148,8 @@ const SignalCard: React.FC<SignalCardProps> = ({ candidate, index = 0 }) => {
   };
 
   const getConfidenceLevel = () => {
-    if (!candidate.signal_analysis) return 'No Signal';
-    const confidence = candidate.signal_analysis.primary_confidence;
+    if (!candidate.signalAnalysis) return 'No Signal';
+    const confidence = candidate.signalAnalysis.primaryConfidence;
     if (confidence >= 80) return 'Very High';
     if (confidence >= 60) return 'High';
     if (confidence >= 40) return 'Medium';
@@ -163,17 +163,6 @@ const SignalCard: React.FC<SignalCardProps> = ({ candidate, index = 0 }) => {
     if (score >= 60) return 'B';
     if (score >= 50) return 'C+';
     return 'C';
-  };
-
-  const liquidAnimation = {
-    initial: { x: '-100%' },
-    animate: { x: '100%' },
-    transition: {
-      duration: 2,
-      ease: 'easeInOut',
-      repeat: Infinity,
-      repeatDelay: 3
-    }
   };
 
   return (
@@ -191,21 +180,14 @@ const SignalCard: React.FC<SignalCardProps> = ({ candidate, index = 0 }) => {
           setHoverTimeout(timeout);
         }}
         className={`glass-signal-card relative overflow-hidden cursor-pointer transition-all duration-300 ${
-          candidate.signal_analysis?.primary_signal === 'BULLISH' ? 'bullish' :
-          candidate.signal_analysis?.primary_signal === 'BEARISH' ? 'bearish' : 'neutral'
+          candidate.signalAnalysis?.primarySignal === 'BULLISH' ? 'bullish' :
+          candidate.signalAnalysis?.primarySignal === 'BEARISH' ? 'bearish' : 'neutral'
         }`}
         style={{
           boxShadow: 'var(--shadow-glass-small)',
-          transition: 'var(--transition-normal)',
           height: '120px' // Fixed compact height
         }}
       >
-        {/* Liquid glass effect */}
-        <motion.div
-          className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent skew-x-12 pointer-events-none"
-          {...liquidAnimation}
-          style={{ width: '30%' }}
-        />
 
         {/* Compact Content */}
         <div className="p-4 relative z-10 h-full flex flex-col justify-between">
@@ -218,7 +200,7 @@ const SignalCard: React.FC<SignalCardProps> = ({ candidate, index = 0 }) => {
               <div>
                 <div className="flex items-center gap-1">
                   <h3 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>{candidate.ticker}</h3>
-                  {(candidate.passes_all_screens || candidate.ema_stack_aligned) && <Shield className="w-3 h-3 text-green-600" />}
+                  {(candidate.passesAllScreens || candidate.emaStackAligned) && <Shield className="w-3 h-3 text-green-600" />}
                 </div>
                 <p className="text-xs truncate max-w-[120px]" style={{ color: 'var(--text-secondary)' }}>
                   {candidate.name}
@@ -227,9 +209,9 @@ const SignalCard: React.FC<SignalCardProps> = ({ candidate, index = 0 }) => {
             </div>
             <div className="text-right">
               <div className={`text-lg font-bold ${
-                candidate.signal_analysis?.primary_signal === 'BULLISH' ? 'text-green-800' :
-                candidate.signal_analysis?.primary_signal === 'BEARISH' ? 'text-red-600' : 
-                candidate.signal_analysis?.primary_signal === 'NEUTRAL' ? 'text-orange-500' : 'text-gray-600'
+                candidate.signalAnalysis?.primarySignal === 'BULLISH' ? 'text-green-800' :
+                candidate.signalAnalysis?.primarySignal === 'BEARISH' ? 'text-red-600' :
+                candidate.signalAnalysis?.primarySignal === 'NEUTRAL' ? 'text-orange-500' : 'text-gray-600'
               }`}>
                 ${currentPrice.toFixed(2)}
               </div>
@@ -238,29 +220,29 @@ const SignalCard: React.FC<SignalCardProps> = ({ candidate, index = 0 }) => {
 
           {/* Bottom Row: Signal + Score */}
           <div className="flex items-center justify-between">
-            {candidate.signal_analysis && (
+            {candidate.signalAnalysis && (
               <div className="flex items-center gap-2">
                 <div className={`px-2 py-1 rounded text-xs font-semibold ${
-                  candidate.signal_analysis.primary_signal === 'BULLISH' ? 'text-green-800' :
-                  candidate.signal_analysis.primary_signal === 'BEARISH' ? 'text-red-600' : 'text-orange-500'
+                  candidate.signalAnalysis.primarySignal === 'BULLISH' ? 'text-green-800' :
+                  candidate.signalAnalysis.primarySignal === 'BEARISH' ? 'text-red-600' : 'text-orange-500'
                 }`}>
-                  {candidate.signal_analysis.primary_signal}
+                  {candidate.signalAnalysis.primarySignal}
                 </div>
                 <div className={`text-xs ${
-                  candidate.signal_analysis.primary_signal === 'BULLISH' ? 'text-green-800/70' :
-                  candidate.signal_analysis.primary_signal === 'BEARISH' ? 'text-red-600/70' : 'text-orange-500/70'
+                  candidate.signalAnalysis.primarySignal === 'BULLISH' ? 'text-green-800/70' :
+                  candidate.signalAnalysis.primarySignal === 'BEARISH' ? 'text-red-600/70' : 'text-orange-500/70'
                 }`}>
-                  {candidate.signal_analysis.primary_confidence}%
+                  {candidate.signalAnalysis.primaryConfidence}%
                 </div>
               </div>
             )}
             <div className="flex items-center gap-1">
               <div className={`px-2 py-1 rounded text-xs font-semibold ${
-                candidate.screening_score >= 80 ? 'bg-green-800/20 text-green-800' :
-                candidate.screening_score >= 60 ? 'bg-orange-500/20 text-orange-500' :
+                candidate.screeningScore >= 80 ? 'bg-green-800/20 text-green-800' :
+                candidate.screeningScore >= 60 ? 'bg-orange-500/20 text-orange-500' :
                 'bg-red-600/20 text-red-600'
               }`}>
-                {getScoreGrade(candidate.screening_score)}
+                {getScoreGrade(candidate.screeningScore)}
               </div>
             </div>
           </div>
@@ -269,28 +251,6 @@ const SignalCard: React.FC<SignalCardProps> = ({ candidate, index = 0 }) => {
 
 
 
-
-      {/* Pulse effect for high confidence signals */}
-      {candidate.signal_analysis && candidate.signal_analysis.primary_confidence >= 80 && (
-        <div className="absolute inset-0 pointer-events-none">
-          <motion.div
-            className={`absolute inset-0 rounded-2xl ${
-              candidate.signal_analysis.primary_signal === 'BULLISH' 
-                ? 'border-2 border-green-400/30' 
-                : 'border-2 border-red-400/30'
-            }`}
-            animate={{
-              scale: [1, 1.02, 1],
-              opacity: [0.3, 0.6, 0.3]
-            }}
-            transition={{
-              duration: 2,
-              repeat: Infinity,
-              ease: 'easeInOut'
-            }}
-          />
-        </div>
-      )}
 
       {/* Hover Popup */}
       <AnimatePresence>
@@ -360,7 +320,7 @@ const SignalCard: React.FC<SignalCardProps> = ({ candidate, index = 0 }) => {
                       <h2 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>
                         {candidate.ticker}
                       </h2>
-                      {(candidate.passes_all_screens || candidate.ema_stack_aligned) && (
+                      {(candidate.passesAllScreens || candidate.emaStackAligned) && (
                         <Shield className="w-4 h-4 text-green-600" />
                       )}
                     </div>
@@ -374,9 +334,9 @@ const SignalCard: React.FC<SignalCardProps> = ({ candidate, index = 0 }) => {
                 </div>
                 <div className="text-right">
                   <div className={`text-2xl font-bold ${
-                    candidate.signal_analysis?.primary_signal === 'BULLISH' ? 'text-green-800' :
-                    candidate.signal_analysis?.primary_signal === 'BEARISH' ? 'text-red-600' : 
-                    candidate.signal_analysis?.primary_signal === 'NEUTRAL' ? 'text-orange-500' : 'text-gray-600'
+                    candidate.signalAnalysis?.primarySignal === 'BULLISH' ? 'text-green-800' :
+                    candidate.signalAnalysis?.primarySignal === 'BEARISH' ? 'text-red-600' :
+                    candidate.signalAnalysis?.primarySignal === 'NEUTRAL' ? 'text-orange-500' : 'text-gray-600'
                   }`}>
                     ${currentPrice.toFixed(2)}
                   </div>
@@ -384,35 +344,35 @@ const SignalCard: React.FC<SignalCardProps> = ({ candidate, index = 0 }) => {
               </div>
 
               {/* Signal Analysis */}
-              {candidate.signal_analysis && (
+              {candidate.signalAnalysis && (
                 <div className="mb-4 p-3 rounded-lg bg-white/5">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <Zap className={`w-4 h-4 ${getSignalColor()}`} />
                       <div>
                         <div className={`text-sm font-bold ${
-                          candidate.signal_analysis.primary_signal === 'BULLISH' ? 'text-green-800' :
-                          candidate.signal_analysis.primary_signal === 'BEARISH' ? 'text-red-600' : 'text-orange-500'
+                          candidate.signalAnalysis.primarySignal === 'BULLISH' ? 'text-green-800' :
+                          candidate.signalAnalysis.primarySignal === 'BEARISH' ? 'text-red-600' : 'text-orange-500'
                         }`}>
-                          {candidate.signal_analysis.primary_signal} - {getConfidenceLevel()}
+                          {candidate.signalAnalysis.primarySignal} - {getConfidenceLevel()}
                         </div>
                       </div>
                     </div>
                     <div className="text-right">
                       <div className={`text-xl font-bold ${
-                        candidate.signal_analysis.primary_signal === 'BULLISH' ? 'text-green-800' :
-                        candidate.signal_analysis.primary_signal === 'BEARISH' ? 'text-red-600' : 'text-orange-500'
+                        candidate.signalAnalysis.primarySignal === 'BULLISH' ? 'text-green-800' :
+                        candidate.signalAnalysis.primarySignal === 'BEARISH' ? 'text-red-600' : 'text-orange-500'
                       }`}>
-                        {candidate.signal_analysis.primary_confidence}%
+                        {candidate.signalAnalysis.primaryConfidence}%
                       </div>
                       <div className="w-20 h-1.5 bg-white/20 rounded-full overflow-hidden mt-1">
                         <motion.div
                           className={`h-full ${
-                            candidate.signal_analysis.primary_signal === 'BULLISH' ? 'bg-green-800' :
-                            candidate.signal_analysis.primary_signal === 'BEARISH' ? 'bg-red-600' : 'bg-orange-500'
+                            candidate.signalAnalysis.primarySignal === 'BULLISH' ? 'bg-green-800' :
+                            candidate.signalAnalysis.primarySignal === 'BEARISH' ? 'bg-red-600' : 'bg-orange-500'
                           }`}
                           initial={{ width: 0 }}
-                          animate={{ width: `${candidate.signal_analysis.primary_confidence}%` }}
+                          animate={{ width: `${candidate.signalAnalysis.primaryConfidence}%` }}
                           transition={{ duration: 1, delay: 0.3 }}
                         />
                       </div>
@@ -422,19 +382,19 @@ const SignalCard: React.FC<SignalCardProps> = ({ candidate, index = 0 }) => {
                   {/* Signal Reasons */}
                   <div className="space-y-1.5">
                     <h4 className={`text-xs font-semibold flex items-center gap-1.5 ${
-                      candidate.signal_analysis.primary_signal === 'BULLISH' ? 'text-green-700' :
-                      candidate.signal_analysis.primary_signal === 'BEARISH' ? 'text-red-600' : 'text-orange-600'
+                      candidate.signalAnalysis.primarySignal === 'BULLISH' ? 'text-green-700' :
+                      candidate.signalAnalysis.primarySignal === 'BEARISH' ? 'text-red-600' : 'text-orange-600'
                     }`}>
                       <Target className="w-3 h-3" />
                       Key Signals
                     </h4>
                     <div className="space-y-1">
-                      {(candidate.signal_analysis.primary_reasons || []).slice(0, 3).map((reason, idx) => (
+                      {(candidate.signalAnalysis.primaryReasons || []).slice(0, 3).map((reason, idx) => (
                         <div
                           key={idx}
                           className={`flex items-start gap-1.5 text-xs ${
-                            candidate.signal_analysis?.primary_signal === 'BULLISH' ? 'text-green-700/80' :
-                            candidate.signal_analysis?.primary_signal === 'BEARISH' ? 'text-red-600/80' : 'text-orange-600/80'
+                            candidate.signalAnalysis?.primarySignal === 'BULLISH' ? 'text-green-700/80' :
+                            candidate.signalAnalysis?.primarySignal === 'BEARISH' ? 'text-red-600/80' : 'text-orange-600/80'
                           }`}
                         >
                           <div className="w-1 h-1 rounded-full bg-current mt-1 flex-shrink-0" />
@@ -458,13 +418,13 @@ const SignalCard: React.FC<SignalCardProps> = ({ candidate, index = 0 }) => {
                 </div>
                 <div className="flex items-center gap-2">
                   <div className={`text-xl font-bold ${
-                    candidate.screening_score >= 80 ? 'text-green-800' :
-                    candidate.screening_score >= 60 ? 'text-orange-500' : 'text-red-600'
+                    candidate.screeningScore >= 80 ? 'text-green-800' :
+                    candidate.screeningScore >= 60 ? 'text-orange-500' : 'text-red-600'
                   }`}>
-                    {getScoreGrade(candidate.screening_score)}
+                    {getScoreGrade(candidate.screeningScore)}
                   </div>
                   <div className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>
-                    ({candidate.screening_score}%)
+                    ({candidate.screeningScore}%)
                   </div>
                 </div>
               </div>

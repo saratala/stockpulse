@@ -1,11 +1,14 @@
 package com.stockpulse.agent.controller;
 
+import com.stockpulse.agent.dto.StrategyComparison;
+import com.stockpulse.agent.service.ComprehensiveBacktestService;
 import com.stockpulse.agent.service.RealTimeDataService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -16,6 +19,7 @@ import java.util.Map;
 public class DataController {
     
     private final RealTimeDataService realTimeDataService;
+    private final ComprehensiveBacktestService comprehensiveBacktestService;
     
     @PostMapping("/update/realtime")
     public ResponseEntity<Map<String, Object>> updateRealTimeData() {
@@ -118,6 +122,56 @@ public class DataController {
             Map<String, Object> response = new HashMap<>();
             response.put("status", "error");
             response.put("message", "Full data update failed: " + e.getMessage());
+            response.put("timestamp", java.time.LocalDateTime.now());
+            
+            return ResponseEntity.status(500).body(response);
+        }
+    }
+    
+    @PostMapping("/backtest/comprehensive")
+    public ResponseEntity<StrategyComparison> runComprehensiveBacktest(
+            @RequestParam String ticker,
+            @RequestParam(defaultValue = "10000") BigDecimal initialCapital) {
+        
+        log.info("Running comprehensive strategy backtest for ticker: {} with capital: {}", ticker, initialCapital);
+        
+        try {
+            StrategyComparison comparison = comprehensiveBacktestService.runComprehensiveBacktest(ticker, initialCapital);
+            return ResponseEntity.ok(comparison);
+        } catch (Exception e) {
+            log.error("Error running comprehensive backtest", e);
+            return ResponseEntity.status(500).body(StrategyComparison.builder()
+                .ticker(ticker)
+                .strategies(new java.util.ArrayList<>())
+                .build());
+        }
+    }
+    
+    @PostMapping("/load/yearly")
+    public ResponseEntity<Map<String, Object>> loadYearlyData(
+            @RequestParam(defaultValue = "2024") int year) {
+        
+        log.info("Loading yearly historical data for year: {}", year);
+        
+        try {
+            int recordsLoaded = realTimeDataService.loadYearlyData(year);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "success");
+            response.put("message", "Successfully loaded " + recordsLoaded + " records for year " + year);
+            response.put("year", year);
+            response.put("recordsLoaded", recordsLoaded);
+            response.put("timestamp", java.time.LocalDateTime.now());
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            log.error("Error loading yearly data for year: {}", year, e);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "error");
+            response.put("message", "Failed to load yearly data: " + e.getMessage());
+            response.put("year", year);
             response.put("timestamp", java.time.LocalDateTime.now());
             
             return ResponseEntity.status(500).body(response);

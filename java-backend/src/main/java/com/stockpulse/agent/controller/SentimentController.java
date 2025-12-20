@@ -4,6 +4,7 @@ import com.stockpulse.agent.model.NewsArticle;
 import com.stockpulse.agent.model.SentimentScore;
 import com.stockpulse.agent.repository.NewsArticleRepository;
 import com.stockpulse.agent.repository.SentimentScoreRepository;
+import com.stockpulse.agent.service.NewsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -22,9 +23,10 @@ import java.util.Map;
 @RequiredArgsConstructor
 @Slf4j
 public class SentimentController {
-    
+
     private final SentimentScoreRepository sentimentScoreRepository;
     private final NewsArticleRepository newsArticleRepository;
+    private final NewsService newsService;
     
     @GetMapping("/{ticker}")
     public ResponseEntity<Map<String, Object>> getSentimentByTicker(
@@ -39,9 +41,15 @@ public class SentimentController {
         List<SentimentScore> sentiments = sentimentScoreRepository
             .findByTickerAndPublishedAtBetween(ticker.toUpperCase(), since, LocalDateTime.now());
         
-        // Get news articles
+        // Get news articles from database
         List<NewsArticle> news = newsArticleRepository
             .findByTickerAndPublishedAtBetween(ticker.toUpperCase(), since, LocalDateTime.now());
+
+        // If no news found, fetch fresh news from external sources
+        if (news.isEmpty()) {
+            log.info("No news in DB for {}, fetching from external sources", ticker);
+            news = newsService.fetchNewsForTicker(ticker.toUpperCase());
+        }
         
         // Calculate average sentiment
         BigDecimal avgSentiment = sentimentScoreRepository
@@ -101,15 +109,49 @@ public class SentimentController {
             @PathVariable String ticker,
             @RequestParam(defaultValue = "24") int hours,
             @RequestParam(defaultValue = "50") int limit) {
-        
+
         log.info("Getting news for ticker={}, hours={}, limit={}", ticker, hours, limit);
-        
+
         LocalDateTime since = LocalDateTime.now().minusHours(hours);
-        
+
         Pageable pageable = PageRequest.of(0, limit);
         List<NewsArticle> news = newsArticleRepository
             .findByTickerOrderByPublishedAtDesc(ticker.toUpperCase(), pageable).getContent();
-        
+
+        // If no news found, fetch from external sources
+        if (news.isEmpty()) {
+            log.info("No news in DB for {}, fetching from external sources", ticker);
+            news = newsService.fetchNewsForTicker(ticker.toUpperCase());
+        }
+
         return ResponseEntity.ok(news);
+    }
+
+    @PostMapping("/news/{ticker}/refresh")
+    public ResponseEntity<Map<String, Object>> refreshNewsForTicker(@PathVariable String ticker) {
+        log.info("Force refreshing news for ticker={}", ticker);
+
+        try {
+            List<NewsArticle> news = newsService.fetchNewsForTicker(ticker.toUpperCase());
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("ticker", ticker.toUpperCase());
+            response.put("articlesFound", news.size());
+            response.put("news", news);
+            response.put("status", "success");
+            response.put("message", "News refreshed successfully");
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("Error refreshing news for ticker={}", ticker, e);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("ticker", ticker.toUpperCase());
+            response.put("articlesFound", 0);
+            response.put("status", "error");
+            response.put("message", "Failed to refresh news: " + e.getMessage());
+
+            return ResponseEntity.ok(response);
+        }
     }
 }

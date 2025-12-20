@@ -3,85 +3,89 @@ import { useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
-  TrendingUp,
-  TrendingDown,
   BarChart3,
   Activity,
-  Target,
-  Shield,
   AlertTriangle,
   DollarSign,
   Volume2,
-  Clock,
   Star,
   RefreshCw,
   Info,
-  Zap,
-  Eye,
-  Calculator
+  Eye
 } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { XAxis, YAxis, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import GlassContainer from '../components/GlassContainer';
 import GlassButton from '../components/GlassButton';
 import LoadingSpinner from '../components/LoadingSpinner';
 import '../styles/glassmorphism.css';
 
-interface ComprehensiveAnalysis {
+interface StockInfo {
+  id: number;
   ticker: string;
-  analysis_date: string;
-  current_price: number;
-  market_regime: {
-    regime: 'bullish' | 'bearish' | 'neutral';
-    strength: number;
-    components: any;
-  };
-  key_levels: {
-    pivot_points: any;
-    moving_averages: any;
-    bollinger_bands: any;
-    recent_high: number;
-    recent_low: number;
-  };
-  technical_indicators: {
-    trend: any;
-    momentum: any;
-    volatility: any;
-    strength: any;
-  };
-  heikin_ashi: {
-    ha_bullish: boolean;
-    ha_strength: number;
-  };
-  performance: {
-    return_1d: number;
-    return_5d: number;
-    return_10d: number;
-    return_20d: number;
-  };
-  signal_analysis?: {
-    primary_signal: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
-    primary_confidence: number;
-    primary_reasons: string[];
-  };
-  screening_analysis?: {
-    screening_score: number;
-    passes_all_screens: boolean;
-  };
+  name: string;
+  sector: string;
+  industry: string;
+  marketCap: number | null;
+}
+
+interface StockPrice {
+  ticker: string;
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  adjustedClose: number;
+}
+
+interface SentimentData {
+  ticker: string;
+  averageSentiment: number;
+  totalNews: number;
+  totalSentiments: number;
+  polarityCounts: [string, number][];
+  sentiments: {
+    id: number;
+    ticker: string;
+    sentimentScore: number;
+    polarity: string;
+    reasoning: string;
+    analysisProvider: string;
+    source: string;
+    confidence: number;
+  }[];
+  news: {
+    id: number;
+    ticker: string;
+    title: string;
+    url: string;
+    publishedAt: string;
+    source: string;
+    content: string;
+  }[];
+}
+
+interface StockAnalysisData {
+  stock: StockInfo;
+  latestPrice: StockPrice | null;
+  sentiment: SentimentData | null;
+  priceHistory: StockPrice[];
 }
 
 const StockAnalysis: React.FC = () => {
   const { ticker } = useParams<{ ticker: string }>();
-  const [analysis, setAnalysis] = useState<ComprehensiveAnalysis | null>(null);
+  const [analysisData, setAnalysisData] = useState<StockAnalysisData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'technical' | 'signals' | 'levels'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'sentiment' | 'news'>('overview');
   const [refreshing, setRefreshing] = useState(false);
 
-  const API_BASE_URL = 'http://localhost:8000';
+  const API_BASE_URL = '/api/v1';
 
   const fetchAnalysis = async (showRefreshSpinner = false) => {
     if (!ticker) return;
-    
+
     try {
       if (showRefreshSpinner) {
         setRefreshing(true);
@@ -90,14 +94,26 @@ const StockAnalysis: React.FC = () => {
       }
       setError(null);
 
-      const response = await fetch(`${API_BASE_URL}/screener/comprehensive/${ticker.toUpperCase()}`);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      const upperTicker = ticker.toUpperCase();
+
+      // Fetch all data in parallel
+      const [stockRes, priceRes, sentimentRes, historyRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/stocks/${upperTicker}`),
+        fetch(`${API_BASE_URL}/stocks/${upperTicker}/prices/latest`),
+        fetch(`${API_BASE_URL}/sentiment/${upperTicker}`),
+        fetch(`${API_BASE_URL}/stocks/${upperTicker}/prices?limit=30`)
+      ]);
+
+      if (!stockRes.ok) {
+        throw new Error(`Stock not found: ${upperTicker}`);
       }
 
-      const data = await response.json();
-      setAnalysis(data);
+      const stock = await stockRes.json();
+      const latestPrice = priceRes.ok ? await priceRes.json() : null;
+      const sentiment = sentimentRes.ok ? await sentimentRes.json() : null;
+      const priceHistory = historyRes.ok ? await historyRes.json() : [];
+
+      setAnalysisData({ stock, latestPrice, sentiment, priceHistory });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch analysis');
     } finally {
@@ -110,45 +126,28 @@ const StockAnalysis: React.FC = () => {
     fetchAnalysis();
   }, [ticker]);
 
-  const getRegimeColor = (regime: string) => {
-    switch (regime) {
-      case 'bullish':
-        return 'text-green-400';
-      case 'bearish':
-        return 'text-red-400';
-      default:
-        return 'text-orange-400';
-    }
+  const getSentimentColor = (sentiment: number) => {
+    if (sentiment > 0.2) return 'text-emerald-400';
+    if (sentiment < -0.2) return 'text-red-400';
+    return 'text-amber-400';
   };
 
-  const getRegimeIcon = (regime: string) => {
-    switch (regime) {
-      case 'bullish':
-        return <TrendingUp className="w-5 h-5" />;
-      case 'bearish':
-        return <TrendingDown className="w-5 h-5" />;
-      default:
-        return <Activity className="w-5 h-5" />;
-    }
-  };
-
-  const getPerformanceColor = (value: number) => {
-    if (value > 0) return 'text-green-400';
-    if (value < 0) return 'text-red-400';
-    return 'text-white/70';
+  const getSentimentLabel = (sentiment: number) => {
+    if (sentiment > 0.2) return 'Bullish';
+    if (sentiment < -0.2) return 'Bearish';
+    return 'Neutral';
   };
 
   const tabs = [
     { key: 'overview', label: 'Overview', icon: BarChart3 },
-    { key: 'technical', label: 'Technical', icon: Activity },
-    { key: 'signals', label: 'Signals', icon: Zap },
-    { key: 'levels', label: 'Levels', icon: Target }
+    { key: 'sentiment', label: 'Sentiment', icon: Activity },
+    { key: 'news', label: 'News', icon: Eye }
   ];
 
-  if (loading && !analysis) {
+  if (loading && !analysisData) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
-        <LoadingSpinner size="lg" text="Analyzing stock..." />
+        <LoadingSpinner size="lg" text="Loading stock data..." />
       </div>
     );
   }
@@ -170,7 +169,9 @@ const StockAnalysis: React.FC = () => {
     );
   }
 
-  if (!analysis) return null;
+  if (!analysisData) return null;
+
+  const { stock, latestPrice, sentiment, priceHistory } = analysisData;
 
   return (
     <div className="min-h-screen relative overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
@@ -179,12 +180,12 @@ const StockAnalysis: React.FC = () => {
 
       <div className="relative z-10 p-4 pt-8">
         {/* Header */}
-        <div 
+        <div
           className="mb-6 backdrop-blur-sm border rounded-2xl"
-          style={{ 
-            background: 'var(--header-bg)',
-            borderColor: 'var(--header-border)',
-            boxShadow: 'var(--shadow-glass-small)'
+          style={{
+            background: 'var(--glass-primary)',
+            borderColor: 'var(--border-glass)',
+            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.3)'
           }}
         >
           <div className="p-6">
@@ -197,11 +198,11 @@ const StockAnalysis: React.FC = () => {
                   icon={<ArrowLeft className="w-4 h-4" />}
                 />
                 <div>
-                  <h1 className="text-2xl md:text-3xl font-bold" style={{ color: 'var(--text-primary)' }}>
-                    {analysis.ticker}
+                  <h1 className="text-2xl md:text-3xl font-bold text-slate-50">
+                    {stock.ticker}
                   </h1>
-                  <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                    Comprehensive Analysis
+                  <p className="text-sm text-slate-400">
+                    {stock.name} • {stock.sector}
                   </p>
                 </div>
               </div>
@@ -222,53 +223,42 @@ const StockAnalysis: React.FC = () => {
               </div>
             </div>
 
-            {/* Price and Market Regime */}
+            {/* Price and Sentiment Summary */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <GlassContainer variant="accent" className="p-4">
                 <div className="flex items-center gap-3">
-                  <DollarSign className="w-8 h-8 text-blue-400" />
+                  <DollarSign className="w-8 h-8 text-indigo-400" />
                   <div>
-                    <div className="text-2xl font-bold text-white/95">
-                      ${analysis.current_price.toFixed(2)}
+                    <div className="text-2xl font-bold text-slate-50">
+                      ${latestPrice?.close?.toFixed(2) || 'N/A'}
                     </div>
-                    <div className="text-sm text-white/60">Current Price</div>
+                    <div className="text-sm text-slate-400">Current Price</div>
                   </div>
                 </div>
               </GlassContainer>
 
-              <GlassContainer variant={analysis.market_regime.regime} className="p-4">
+              <GlassContainer className="p-4">
                 <div className="flex items-center gap-3">
-                  <div className={getRegimeColor(analysis.market_regime.regime)}>
-                    {getRegimeIcon(analysis.market_regime.regime)}
-                  </div>
+                  <Volume2 className="w-8 h-8 text-cyan-400" />
                   <div>
-                    <div className="text-lg font-bold text-white/95 capitalize">
-                      {analysis.market_regime.regime}
+                    <div className="text-lg font-bold text-slate-50">
+                      {latestPrice?.volume ? (latestPrice.volume / 1000000).toFixed(2) + 'M' : 'N/A'}
                     </div>
-                    <div className="text-sm text-white/60">
-                      {analysis.market_regime.strength}% Strength
-                    </div>
+                    <div className="text-sm text-slate-400">Volume</div>
                   </div>
                 </div>
               </GlassContainer>
 
-              {analysis.signal_analysis && (
-                <GlassContainer 
-                  variant={analysis.signal_analysis.primary_signal === 'BULLISH' ? 'bullish' : 
-                           analysis.signal_analysis.primary_signal === 'BEARISH' ? 'bearish' : 'neutral'}
-                  className="p-4"
-                >
+              {sentiment && (
+                <GlassContainer className="p-4">
                   <div className="flex items-center gap-3">
-                    <Zap className={
-                      analysis.signal_analysis.primary_signal === 'BULLISH' ? 'text-green-400' :
-                      analysis.signal_analysis.primary_signal === 'BEARISH' ? 'text-red-400' : 'text-orange-400'
-                    } />
+                    <Activity className={`w-8 h-8 ${getSentimentColor(sentiment.averageSentiment)}`} />
                     <div>
-                      <div className="text-lg font-bold text-white/95">
-                        {analysis.signal_analysis.primary_signal}
+                      <div className={`text-lg font-bold ${getSentimentColor(sentiment.averageSentiment)}`}>
+                        {getSentimentLabel(sentiment.averageSentiment)}
                       </div>
-                      <div className="text-sm text-white/60">
-                        {analysis.signal_analysis.primary_confidence}% Confidence
+                      <div className="text-sm text-slate-400">
+                        {sentiment.totalNews} news articles
                       </div>
                     </div>
                   </div>
@@ -281,15 +271,15 @@ const StockAnalysis: React.FC = () => {
         {/* Tabs */}
         <GlassContainer className="mb-6">
           <div className="p-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {tabs.map(({ key, label, icon: Icon }) => (
                 <button
                   key={key}
                   onClick={() => setActiveTab(key as any)}
                   className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl transition-all duration-300 ${
                     activeTab === key
-                      ? 'bg-white/20 backdrop-blur-md border border-white/30'
-                      : 'bg-white/5 hover:bg-white/10'
+                      ? 'bg-indigo-500/20 backdrop-blur-md border border-indigo-500/30 text-indigo-400'
+                      : 'bg-slate-800/50 hover:bg-slate-700/50 text-slate-300'
                   }`}
                 >
                   <Icon className="w-4 h-4" />
@@ -312,54 +302,76 @@ const StockAnalysis: React.FC = () => {
             {/* Overview Tab */}
             {activeTab === 'overview' && (
               <div className="space-y-6">
-                {/* Performance */}
+                {/* Stock Info */}
                 <GlassContainer>
                   <div className="p-6">
-                    <h3 className="text-lg font-bold text-white/95 mb-4 flex items-center gap-2">
-                      <BarChart3 className="w-5 h-5" />
-                      Performance
+                    <h3 className="text-lg font-bold text-slate-50 mb-4 flex items-center gap-2">
+                      <Info className="w-5 h-5 text-indigo-400" />
+                      Stock Information
                     </h3>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      {[
-                        { label: '1D', value: analysis.performance.return_1d },
-                        { label: '5D', value: analysis.performance.return_5d },
-                        { label: '10D', value: analysis.performance.return_10d },
-                        { label: '20D', value: analysis.performance.return_20d }
-                      ].map(({ label, value }) => (
-                        <div key={label} className="text-center p-3 rounded-xl bg-white/5">
-                          <div className={`text-xl font-bold ${getPerformanceColor(value)}`}>
-                            {value > 0 ? '+' : ''}{value.toFixed(2)}%
+                      <div className="p-3 rounded-xl bg-slate-800/50">
+                        <div className="text-sm text-slate-400">Sector</div>
+                        <div className="text-lg font-medium text-slate-100">{stock.sector}</div>
+                      </div>
+                      <div className="p-3 rounded-xl bg-slate-800/50">
+                        <div className="text-sm text-slate-400">Industry</div>
+                        <div className="text-lg font-medium text-slate-100">{stock.industry}</div>
+                      </div>
+                      {latestPrice && (
+                        <>
+                          <div className="p-3 rounded-xl bg-slate-800/50">
+                            <div className="text-sm text-slate-400">Day High</div>
+                            <div className="text-lg font-medium text-emerald-400">${latestPrice.high.toFixed(2)}</div>
                           </div>
-                          <div className="text-sm text-white/60">{label} Return</div>
-                        </div>
-                      ))}
+                          <div className="p-3 rounded-xl bg-slate-800/50">
+                            <div className="text-sm text-slate-400">Day Low</div>
+                            <div className="text-lg font-medium text-red-400">${latestPrice.low.toFixed(2)}</div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 </GlassContainer>
 
-                {/* Quick Stats */}
-                {analysis.screening_analysis && (
+                {/* Price History Chart */}
+                {priceHistory.length > 0 && (
                   <GlassContainer>
                     <div className="p-6">
-                      <h3 className="text-lg font-bold text-white/95 mb-4 flex items-center gap-2">
-                        <Shield className="w-5 h-5" />
-                        Screening Results
+                      <h3 className="text-lg font-bold text-slate-50 mb-4 flex items-center gap-2">
+                        <BarChart3 className="w-5 h-5 text-indigo-400" />
+                        Price History
                       </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="p-4 rounded-xl bg-white/5">
-                          <div className="text-2xl font-bold text-white/95 mb-1">
-                            {analysis.screening_analysis.screening_score}%
-                          </div>
-                          <div className="text-sm text-white/60">Screening Score</div>
-                        </div>
-                        <div className="p-4 rounded-xl bg-white/5">
-                          <div className={`text-2xl font-bold mb-1 ${
-                            analysis.screening_analysis.passes_all_screens ? 'text-green-400' : 'text-red-400'
-                          }`}>
-                            {analysis.screening_analysis.passes_all_screens ? 'PASS' : 'FAIL'}
-                          </div>
-                          <div className="text-sm text-white/60">All Screens</div>
-                        </div>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={priceHistory.slice().reverse()}>
+                            <defs>
+                              <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#6366F1" stopOpacity={0.3}/>
+                                <stop offset="95%" stopColor="#6366F1" stopOpacity={0}/>
+                              </linearGradient>
+                            </defs>
+                            <XAxis
+                              dataKey="date"
+                              tickFormatter={(val) => new Date(val).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              stroke="#94A3B8"
+                              tick={{ fill: '#94A3B8', fontSize: 12 }}
+                            />
+                            <YAxis
+                              stroke="#94A3B8"
+                              tick={{ fill: '#94A3B8', fontSize: 12 }}
+                              domain={['auto', 'auto']}
+                              tickFormatter={(val) => `$${val}`}
+                            />
+                            <Area
+                              type="monotone"
+                              dataKey="close"
+                              stroke="#6366F1"
+                              fill="url(#priceGradient)"
+                              strokeWidth={2}
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
                       </div>
                     </div>
                   </GlassContainer>
@@ -367,202 +379,140 @@ const StockAnalysis: React.FC = () => {
               </div>
             )}
 
-            {/* Technical Tab */}
-            {activeTab === 'technical' && (
+            {/* Sentiment Tab */}
+            {activeTab === 'sentiment' && (
               <div className="space-y-6">
-                <GlassContainer>
-                  <div className="p-6">
-                    <h3 className="text-lg font-bold text-white/95 mb-4">Technical Indicators</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* Trend Indicators */}
-                      <div>
-                        <h4 className="text-white/90 font-semibold mb-3">Trend</h4>
-                        <div className="space-y-2">
-                          {Object.entries(analysis.technical_indicators.trend).map(([key, value]) => (
-                            <div key={key} className="flex justify-between items-center p-2 rounded-lg bg-white/5">
-                              <span className="text-sm text-white/70 capitalize">{key.replace('_', ' ')}</span>
-                              <span className="text-sm font-medium text-white/90">
-                                {typeof value === 'number' ? value.toFixed(2) : 'N/A'}
-                              </span>
+                {sentiment ? (
+                  <>
+                    <GlassContainer>
+                      <div className="p-6">
+                        <h3 className="text-lg font-bold text-slate-50 mb-4 flex items-center gap-2">
+                          <Activity className="w-5 h-5 text-indigo-400" />
+                          Sentiment Analysis
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="p-4 rounded-xl bg-slate-800/50">
+                            <div className="text-sm text-slate-400 mb-1">Average Sentiment</div>
+                            <div className={`text-2xl font-bold ${getSentimentColor(sentiment.averageSentiment)}`}>
+                              {sentiment.averageSentiment.toFixed(2)}
                             </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Momentum Indicators */}
-                      <div>
-                        <h4 className="text-white/90 font-semibold mb-3">Momentum</h4>
-                        <div className="space-y-2">
-                          {Object.entries(analysis.technical_indicators.momentum).map(([key, value]) => (
-                            <div key={key} className="flex justify-between items-center p-2 rounded-lg bg-white/5">
-                              <span className="text-sm text-white/70 capitalize">{key.replace('_', ' ')}</span>
-                              <span className="text-sm font-medium text-white/90">
-                                {typeof value === 'number' ? value.toFixed(2) : 'N/A'}
-                              </span>
+                          </div>
+                          <div className="p-4 rounded-xl bg-slate-800/50">
+                            <div className="text-sm text-slate-400 mb-1">News Articles</div>
+                            <div className="text-2xl font-bold text-slate-100">{sentiment.totalNews}</div>
+                          </div>
+                          <div className="p-4 rounded-xl bg-slate-800/50">
+                            <div className="text-sm text-slate-400 mb-1">Sentiment Label</div>
+                            <div className={`text-2xl font-bold ${getSentimentColor(sentiment.averageSentiment)}`}>
+                              {getSentimentLabel(sentiment.averageSentiment)}
                             </div>
-                          ))}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </div>
-                </GlassContainer>
+                    </GlassContainer>
 
-                {/* Heikin Ashi */}
-                <GlassContainer variant={analysis.heikin_ashi.ha_bullish ? 'bullish' : 'bearish'}>
-                  <div className="p-6">
-                    <h3 className="text-lg font-bold text-white/95 mb-4 flex items-center gap-2">
-                      <Activity className="w-5 h-5" />
-                      Heikin Ashi Analysis
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="p-4 rounded-xl bg-white/10">
-                        <div className="text-xl font-bold text-white/95 mb-1">
-                          {analysis.heikin_ashi.ha_bullish ? 'BULLISH' : 'BEARISH'}
+                    {/* Polarity Distribution */}
+                    {sentiment.polarityCounts.length > 0 && (
+                      <GlassContainer>
+                        <div className="p-6">
+                          <h3 className="text-lg font-bold text-slate-50 mb-4">Polarity Distribution</h3>
+                          <div className="flex gap-4 flex-wrap">
+                            {sentiment.polarityCounts.map(([polarity, count]) => (
+                              <div key={polarity} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800/50">
+                                <div className={`w-3 h-3 rounded-full ${
+                                  polarity === 'positive' ? 'bg-emerald-400' :
+                                  polarity === 'negative' ? 'bg-red-400' : 'bg-amber-400'
+                                }`} />
+                                <span className="text-slate-300 capitalize">{polarity}</span>
+                                <span className="text-slate-400">({count})</span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <div className="text-sm text-white/60">Current Trend</div>
-                      </div>
-                      <div className="p-4 rounded-xl bg-white/10">
-                        <div className="text-xl font-bold text-white/95 mb-1">
-                          {analysis.heikin_ashi.ha_strength.toFixed(2)}%
+                      </GlassContainer>
+                    )}
+
+                    {/* Individual Sentiments */}
+                    {sentiment.sentiments.length > 0 && (
+                      <GlassContainer>
+                        <div className="p-6">
+                          <h3 className="text-lg font-bold text-slate-50 mb-4">Sentiment Details</h3>
+                          <div className="space-y-3">
+                            {sentiment.sentiments.slice(0, 5).map((s) => (
+                              <div key={s.id} className="p-4 rounded-xl bg-slate-800/50 border border-slate-700/50">
+                                <div className="flex justify-between items-start mb-2">
+                                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                    s.polarity === 'positive' ? 'bg-emerald-500/20 text-emerald-400' :
+                                    s.polarity === 'negative' ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400'
+                                  }`}>
+                                    {s.polarity}
+                                  </span>
+                                  <span className="text-xs text-slate-400">{s.source}</span>
+                                </div>
+                                <p className="text-sm text-slate-300">{s.reasoning}</p>
+                                <div className="mt-2 text-xs text-slate-500">
+                                  Confidence: {(s.confidence * 100).toFixed(0)}% • Provider: {s.analysisProvider}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <div className="text-sm text-white/60">Trend Strength</div>
-                      </div>
+                      </GlassContainer>
+                    )}
+                  </>
+                ) : (
+                  <GlassContainer>
+                    <div className="p-8 text-center">
+                      <Activity className="w-12 h-12 mx-auto mb-4 text-slate-500" />
+                      <p className="text-slate-400">No sentiment data available for this stock.</p>
                     </div>
-                  </div>
-                </GlassContainer>
+                  </GlassContainer>
+                )}
               </div>
             )}
 
-            {/* Signals Tab */}
-            {activeTab === 'signals' && analysis.signal_analysis && (
-              <GlassContainer>
-                <div className="p-6">
-                  <h3 className="text-lg font-bold text-white/95 mb-4 flex items-center gap-2">
-                    <Zap className="w-5 h-5" />
-                    Signal Analysis
-                  </h3>
-                  
-                  <div className="mb-6">
-                    <div className="flex items-center gap-4 mb-4">
-                      <div className={`p-4 rounded-xl ${
-                        analysis.signal_analysis.primary_signal === 'BULLISH' ? 'bg-green-500/20' :
-                        analysis.signal_analysis.primary_signal === 'BEARISH' ? 'bg-red-500/20' : 'bg-orange-500/20'
-                      }`}>
-                        {analysis.signal_analysis.primary_signal === 'BULLISH' ? 
-                          <TrendingUp className="w-8 h-8 text-green-400" /> :
-                          analysis.signal_analysis.primary_signal === 'BEARISH' ?
-                          <TrendingDown className="w-8 h-8 text-red-400" /> :
-                          <Activity className="w-8 h-8 text-orange-400" />
-                        }
-                      </div>
-                      <div>
-                        <div className="text-2xl font-bold text-white/95">
-                          {analysis.signal_analysis.primary_signal}
-                        </div>
-                        <div className="text-white/70">
-                          {analysis.signal_analysis.primary_confidence}% Confidence
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="w-full h-2 bg-white/20 rounded-full overflow-hidden mb-6">
-                      <motion.div
-                        className={`h-full ${
-                          analysis.signal_analysis.primary_signal === 'BULLISH' ? 'bg-green-400' :
-                          analysis.signal_analysis.primary_signal === 'BEARISH' ? 'bg-red-400' : 'bg-orange-400'
-                        }`}
-                        initial={{ width: 0 }}
-                        animate={{ width: `${analysis.signal_analysis.primary_confidence}%` }}
-                        transition={{ duration: 1, delay: 0.5 }}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <h4 className="text-white/90 font-semibold mb-3">Signal Reasons</h4>
-                    <div className="space-y-3">
-                      {analysis.signal_analysis.primary_reasons.map((reason, index) => (
-                        <motion.div
-                          key={index}
-                          initial={{ opacity: 0, x: -20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: index * 0.1 }}
-                          className="flex items-start gap-3 p-3 rounded-xl bg-white/5"
-                        >
-                          <div className="w-2 h-2 rounded-full bg-current mt-2 flex-shrink-0" />
-                          <span className="text-white/80">{reason}</span>
-                        </motion.div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </GlassContainer>
-            )}
-
-            {/* Levels Tab */}
-            {activeTab === 'levels' && (
+            {/* News Tab */}
+            {activeTab === 'news' && (
               <div className="space-y-6">
-                {/* Support/Resistance */}
-                <GlassContainer>
-                  <div className="p-6">
-                    <h3 className="text-lg font-bold text-white/95 mb-4 flex items-center gap-2">
-                      <Target className="w-5 h-5" />
-                      Key Levels
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <h4 className="text-white/90 font-semibold mb-3">Recent Range</h4>
-                        <div className="space-y-2">
-                          <div className="flex justify-between items-center p-2 rounded-lg bg-green-500/10">
-                            <span className="text-sm text-white/70">Recent High</span>
-                            <span className="text-sm font-medium text-green-400">
-                              ${analysis.key_levels.recent_high.toFixed(2)}
-                            </span>
-                          </div>
-                          <div className="flex justify-between items-center p-2 rounded-lg bg-red-500/10">
-                            <span className="text-sm text-white/70">Recent Low</span>
-                            <span className="text-sm font-medium text-red-400">
-                              ${analysis.key_levels.recent_low.toFixed(2)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div>
-                        <h4 className="text-white/90 font-semibold mb-3">Moving Averages</h4>
-                        <div className="space-y-2">
-                          {Object.entries(analysis.key_levels.moving_averages).map(([key, value]) => 
-                            value ? (
-                              <div key={key} className="flex justify-between items-center p-2 rounded-lg bg-white/5">
-                                <span className="text-sm text-white/70">{key.replace('_', ' ').toUpperCase()}</span>
-                                <span className="text-sm font-medium text-white/90">
-                                  ${typeof value === 'number' ? value.toFixed(2) : 'N/A'}
-                                </span>
-                              </div>
-                            ) : null
-                          )}
-                        </div>
+                {sentiment && sentiment.news.length > 0 ? (
+                  <GlassContainer>
+                    <div className="p-6">
+                      <h3 className="text-lg font-bold text-slate-50 mb-4 flex items-center gap-2">
+                        <Eye className="w-5 h-5 text-indigo-400" />
+                        Recent News
+                      </h3>
+                      <div className="space-y-4">
+                        {sentiment.news.map((article) => (
+                          <motion.a
+                            key={article.id}
+                            href={article.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="block p-4 rounded-xl bg-slate-800/50 border border-slate-700/50 hover:border-indigo-500/30 transition-colors"
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                          >
+                            <h4 className="text-slate-100 font-medium mb-2 hover:text-indigo-400 transition-colors">
+                              {article.title}
+                            </h4>
+                            <p className="text-sm text-slate-400 mb-2 line-clamp-2">{article.content}</p>
+                            <div className="flex items-center gap-4 text-xs text-slate-500">
+                              <span>{article.source}</span>
+                              <span>{new Date(article.publishedAt).toLocaleDateString()}</span>
+                            </div>
+                          </motion.a>
+                        ))}
                       </div>
                     </div>
-                  </div>
-                </GlassContainer>
-
-                {/* Bollinger Bands */}
-                <GlassContainer>
-                  <div className="p-6">
-                    <h3 className="text-lg font-bold text-white/95 mb-4">Bollinger Bands</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {Object.entries(analysis.key_levels.bollinger_bands).map(([key, value]) => (
-                        <div key={key} className="p-4 rounded-xl bg-white/5 text-center">
-                          <div className="text-lg font-bold text-white/95 mb-1">
-                            ${typeof value === 'number' ? value.toFixed(2) : 'N/A'}
-                          </div>
-                          <div className="text-sm text-white/60 capitalize">{key.replace('_', ' ')}</div>
-                        </div>
-                      ))}
+                  </GlassContainer>
+                ) : (
+                  <GlassContainer>
+                    <div className="p-8 text-center">
+                      <Eye className="w-12 h-12 mx-auto mb-4 text-slate-500" />
+                      <p className="text-slate-400">No news articles available for this stock.</p>
                     </div>
-                  </div>
-                </GlassContainer>
+                  </GlassContainer>
+                )}
               </div>
             )}
           </motion.div>

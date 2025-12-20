@@ -35,4 +35,13 @@ public interface StockPriceRepository extends JpaRepository<StockPrice, StockPri
     
     @Query("SELECT sp FROM StockPrice sp WHERE sp.ticker IN :tickers ORDER BY sp.ticker, sp.date DESC")
     List<StockPrice> findByTickerInOrderByTickerAndDateDesc(@Param("tickers") List<String> tickers);
+    
+    @Query("SELECT sp FROM StockPrice sp WHERE sp.ticker = :ticker ORDER BY sp.date ASC")
+    List<StockPrice> findByTickerOrderByDateAsc(@Param("ticker") String ticker);
+    
+    @Query("SELECT CASE WHEN COUNT(sp) > 0 THEN true ELSE false END FROM StockPrice sp WHERE sp.ticker = :ticker AND sp.date = :date")
+    boolean existsByTickerAndDate(@Param("ticker") String ticker, @Param("date") LocalDateTime date);
+
+    @Query("SELECT sp FROM StockPrice sp WHERE sp.ticker = :ticker AND sp.date <= :targetTime ORDER BY sp.date DESC LIMIT 1")
+    Optional<StockPrice> findClosestPriceToTimestamp(@Param("ticker") String ticker, @Param("targetTime") LocalDateTime targetTime);
 }

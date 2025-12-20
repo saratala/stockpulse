@@ -1,99 +1,75 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Clock, 
-  TrendingUp, 
+import {
+  TrendingUp,
   TrendingDown,
   Minus,
   Filter,
   Search,
-  Calendar,
   RefreshCw,
   BarChart3,
   Target,
   Eye,
-  ArrowUp,
-  ArrowDown,
   Activity,
-  DollarSign
+  Clock
 } from 'lucide-react';
 import GlassContainer from '../components/GlassContainer';
 import GlassButton from '../components/GlassButton';
 import LoadingSpinner from '../components/LoadingSpinner';
-import { fetchPredictionHistory, fetchPredictionSummary } from '../services/api';
+import { fetchScreeningResults } from '../services/api';
 import '../styles/glassmorphism.css';
 
-interface PredictionData {
+interface SignalData {
   ticker: string;
-  timestamp: string;
-  current_price: number;
-  signal_type: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
-  confidence: number;
-  primary_reasons: string[];
-  screening_score: number;
+  name: string;
   sector: string;
-  predicted_price_1h?: number;
-  predicted_price_1d?: number;
-  predicted_price_1w?: number;
-  volume?: number;
+  price: number;
+  screeningScore: number;
   rsi?: number;
-  macd?: number;
-  bollinger_position?: number;
-}
-
-interface PredictionSummary {
-  signal_type: string;
-  count: number;
-  avg_confidence: number;
-  avg_screening_score: number;
-  unique_tickers: number;
+  volumeRatio?: number;
+  changePercent?: number;
+  signalAnalysis?: {
+    primarySignal: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+    primaryConfidence: number;
+    primaryReasons?: string[];
+  };
 }
 
 const PredictionsHistory: React.FC = () => {
-  const [predictions, setPredictions] = useState<PredictionData[]>([]);
-  const [summary, setSummary] = useState<PredictionSummary[]>([]);
+  const [signals, setSignals] = useState<SignalData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedTicker, setSelectedTicker] = useState<string>('');
-  const [timeRange, setTimeRange] = useState<number>(24);
+  const [error, setError] = useState<string | null>(null);
   const [signalFilter, setSignalFilter] = useState<string>('ALL');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
-  useEffect(() => {
-    fetchPredictions();
-    fetchSummary();
-  }, [timeRange, signalFilter, selectedTicker]);
-
-  const fetchPredictions = async () => {
+  const fetchSignals = async () => {
     try {
       setLoading(true);
-      const params: any = {
-        hours: timeRange,
-        limit: 200
-      };
-      
-      if (selectedTicker) {
-        params.ticker = selectedTicker;
-      }
+      setError(null);
+      const response = await fetchScreeningResults({
+        minScore: 0,
+        maxResults: 200,
+        includeSignals: true
+      });
 
-      const response = await fetchPredictionHistory(params);
-      setPredictions(response.predictions || []);
-    } catch (error) {
-      console.error('Error fetching predictions:', error);
+      if (response && response.candidates) {
+        setSignals(response.candidates);
+        setLastUpdated(new Date());
+      }
+    } catch (err) {
+      console.error('Error fetching signals:', err);
+      setError('Failed to fetch signal data');
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchSummary = async () => {
-    try {
-      const response = await fetchPredictionSummary(timeRange);
-      setSummary(response.summary || []);
-    } catch (error) {
-      console.error('Error fetching summary:', error);
-    }
-  };
+  useEffect(() => {
+    fetchSignals();
+  }, []);
 
-  const getSignalIcon = (signal: string) => {
+  const getSignalIcon = (signal?: string) => {
     switch (signal) {
       case 'BULLISH':
         return <TrendingUp className="w-5 h-5 text-green-600" />;
@@ -104,7 +80,7 @@ const PredictionsHistory: React.FC = () => {
     }
   };
 
-  const getSignalColor = (signal: string) => {
+  const getSignalColor = (signal?: string) => {
     switch (signal) {
       case 'BULLISH':
         return 'text-green-600';
@@ -115,7 +91,7 @@ const PredictionsHistory: React.FC = () => {
     }
   };
 
-  const getSignalBg = (signal: string) => {
+  const getSignalBg = (signal?: string) => {
     switch (signal) {
       case 'BULLISH':
         return 'bg-green-600/10';
@@ -126,27 +102,27 @@ const PredictionsHistory: React.FC = () => {
     }
   };
 
-  const formatTimestamp = (timestamp: string) => {
-    return new Date(timestamp).toLocaleString();
-  };
-
   const formatPrice = (price: number) => {
-    return price.toFixed(2);
+    return price?.toFixed(2) || '0.00';
   };
 
-  const getPriceChange = (current: number, predicted?: number) => {
-    if (!predicted) return null;
-    const change = ((predicted - current) / current) * 100;
-    return change;
-  };
-
-  const filteredPredictions = predictions.filter(prediction => {
-    const matchesSignal = signalFilter === 'ALL' || prediction.signal_type === signalFilter;
-    const matchesSearch = searchTerm === '' || 
-      prediction.ticker.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      prediction.sector.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredSignals = signals.filter(signal => {
+    const signalType = signal.signalAnalysis?.primarySignal || 'NEUTRAL';
+    const matchesSignal = signalFilter === 'ALL' || signalType === signalFilter;
+    const matchesSearch = searchTerm === '' ||
+      signal.ticker.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      signal.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      signal.sector.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesSignal && matchesSearch;
   });
+
+  // Calculate summary stats
+  const summary = {
+    bullish: signals.filter(s => s.signalAnalysis?.primarySignal === 'BULLISH').length,
+    bearish: signals.filter(s => s.signalAnalysis?.primarySignal === 'BEARISH').length,
+    neutral: signals.filter(s => !s.signalAnalysis || s.signalAnalysis.primarySignal === 'NEUTRAL').length,
+    total: signals.length
+  };
 
   return (
     <div className="min-h-screen p-6" style={{ background: 'var(--bg-primary)' }}>
@@ -158,101 +134,133 @@ const PredictionsHistory: React.FC = () => {
           className="mb-8"
         >
           <h1 className="text-4xl font-bold mb-2" style={{ color: 'var(--text-primary)' }}>
-            Predictions History
+            Signal History
           </h1>
-          <p className="text-lg" style={{ color: 'var(--text-secondary)' }}>
-            Real-time algorithm predictions updated every 5 minutes
-          </p>
+          <div className="flex items-center gap-4">
+            <p className="text-lg" style={{ color: 'var(--text-secondary)' }}>
+              Latest screening results with signal analysis
+            </p>
+            {lastUpdated && (
+              <div className="flex items-center gap-1 text-sm" style={{ color: 'var(--text-tertiary)' }}>
+                <Clock className="w-4 h-4" />
+                Last updated: {lastUpdated.toLocaleTimeString()}
+              </div>
+            )}
+          </div>
         </motion.div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          {summary.map((item, index) => (
-            <motion.div
-              key={item.signal_type}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.1 }}
-            >
-              <GlassContainer className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    {getSignalIcon(item.signal_type)}
-                    <div>
-                      <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-                        {item.signal_type}
-                      </h3>
-                      <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                        {item.count} predictions
-                      </p>
-                    </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+          >
+            <GlassContainer className="p-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-lg bg-blue-600/10">
+                  <BarChart3 className="w-6 h-6 text-blue-600" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
+                    {summary.total}
                   </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
-                      {item.unique_tickers}
-                    </div>
-                    <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                      stocks
-                    </div>
+                  <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                    Total Analyzed
                   </div>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <div>
-                    <span style={{ color: 'var(--text-secondary)' }}>Avg Confidence: </span>
-                    <span className={getSignalColor(item.signal_type)}>
-                      {item.avg_confidence.toFixed(1)}%
-                    </span>
+              </div>
+            </GlassContainer>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
+            <GlassContainer className="p-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-lg bg-green-600/10">
+                  <TrendingUp className="w-6 h-6 text-green-600" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-green-600">
+                    {summary.bullish}
                   </div>
-                  <div>
-                    <span style={{ color: 'var(--text-secondary)' }}>Avg Score: </span>
-                    <span style={{ color: 'var(--text-primary)' }}>
-                      {item.avg_screening_score.toFixed(1)}
-                    </span>
+                  <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                    Bullish Signals
                   </div>
                 </div>
-              </GlassContainer>
-            </motion.div>
-          ))}
+              </div>
+            </GlassContainer>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+          >
+            <GlassContainer className="p-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-lg bg-red-600/10">
+                  <TrendingDown className="w-6 h-6 text-red-600" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-red-600">
+                    {summary.bearish}
+                  </div>
+                  <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                    Bearish Signals
+                  </div>
+                </div>
+              </div>
+            </GlassContainer>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+          >
+            <GlassContainer className="p-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-lg bg-orange-500/10">
+                  <Minus className="w-6 h-6 text-orange-500" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-orange-500">
+                    {summary.neutral}
+                  </div>
+                  <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                    Neutral Signals
+                  </div>
+                </div>
+              </div>
+            </GlassContainer>
+          </motion.div>
         </div>
 
         {/* Filters */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
+          transition={{ delay: 0.5 }}
           className="mb-6"
         >
           <GlassContainer className="p-6">
             <div className="flex flex-wrap gap-4 items-center">
               {/* Search */}
               <div className="relative flex-1 min-w-64">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" 
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4"
                        style={{ color: 'var(--text-secondary)' }} />
                 <input
                   type="text"
-                  placeholder="Search by ticker or sector..."
+                  placeholder="Search by ticker, name, or sector..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-white/20 focus:outline-none"
                   style={{ color: 'var(--text-primary)' }}
                 />
-              </div>
-
-              {/* Time Range */}
-              <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4" style={{ color: 'var(--text-secondary)' }} />
-                <select
-                  value={timeRange}
-                  onChange={(e) => setTimeRange(Number(e.target.value))}
-                  className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 focus:border-white/20 focus:outline-none"
-                  style={{ color: 'var(--text-primary)' }}
-                >
-                  <option value={1}>1 Hour</option>
-                  <option value={6}>6 Hours</option>
-                  <option value={24}>24 Hours</option>
-                  <option value={168}>1 Week</option>
-                  <option value={720}>1 Month</option>
-                </select>
               </div>
 
               {/* Signal Filter */}
@@ -273,10 +281,11 @@ const PredictionsHistory: React.FC = () => {
 
               {/* Refresh */}
               <GlassButton
-                onClick={fetchPredictions}
+                onClick={fetchSignals}
                 size="sm"
                 variant="secondary"
-                icon={<RefreshCw className="w-4 h-4" />}
+                icon={<RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />}
+                disabled={loading}
               >
                 Refresh
               </GlassButton>
@@ -284,71 +293,82 @@ const PredictionsHistory: React.FC = () => {
           </GlassContainer>
         </motion.div>
 
-        {/* Predictions List */}
+        {/* Signals List */}
         <AnimatePresence>
           {loading ? (
             <div className="flex justify-center py-12">
               <LoadingSpinner />
             </div>
+          ) : error ? (
+            <GlassContainer className="p-6 text-center">
+              <p className="text-red-500 mb-4">{error}</p>
+              <GlassButton onClick={fetchSignals} variant="secondary">
+                Try Again
+              </GlassButton>
+            </GlassContainer>
           ) : (
             <div className="space-y-4">
-              {filteredPredictions.map((prediction, index) => (
+              {filteredSignals.map((signal, index) => (
                 <motion.div
-                  key={`${prediction.ticker}-${prediction.timestamp}`}
+                  key={`${signal.ticker}-${index}`}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
-                  transition={{ delay: index * 0.05 }}
+                  transition={{ delay: Math.min(index * 0.02, 0.5) }}
                 >
                   <GlassContainer className="p-6">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-4">
-                        <div className={`p-3 rounded-lg ${getSignalBg(prediction.signal_type)}`}>
-                          {getSignalIcon(prediction.signal_type)}
+                        <div className={`p-3 rounded-lg ${getSignalBg(signal.signalAnalysis?.primarySignal)}`}>
+                          {getSignalIcon(signal.signalAnalysis?.primarySignal)}
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
                             <h3 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>
-                              {prediction.ticker}
+                              {signal.ticker}
                             </h3>
                             <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                              prediction.signal_type === 'BULLISH' ? 'bg-green-600/20 text-green-600' :
-                              prediction.signal_type === 'BEARISH' ? 'bg-red-600/20 text-red-600' :
+                              signal.signalAnalysis?.primarySignal === 'BULLISH' ? 'bg-green-600/20 text-green-600' :
+                              signal.signalAnalysis?.primarySignal === 'BEARISH' ? 'bg-red-600/20 text-red-600' :
                               'bg-orange-500/20 text-orange-500'
                             }`}>
-                              {prediction.signal_type}
+                              {signal.signalAnalysis?.primarySignal || 'NEUTRAL'}
                             </span>
                           </div>
                           <div className="flex items-center gap-4 text-sm" style={{ color: 'var(--text-secondary)' }}>
-                            <span>{prediction.sector}</span>
-                            <span>•</span>
-                            <span>{formatTimestamp(prediction.timestamp)}</span>
+                            <span>{signal.name}</span>
+                            <span>|</span>
+                            <span>{signal.sector}</span>
                           </div>
                         </div>
                       </div>
                       <div className="text-right">
                         <div className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
-                          ${formatPrice(prediction.current_price)}
+                          ${formatPrice(signal.price)}
                         </div>
-                        <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                          Current Price
-                        </div>
+                        {signal.changePercent !== undefined && (
+                          <div className={`text-sm ${signal.changePercent >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {signal.changePercent >= 0 ? '+' : ''}{signal.changePercent.toFixed(2)}%
+                          </div>
+                        )}
                       </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                       {/* Confidence */}
-                      <div className="flex items-center gap-2">
-                        <Target className="w-4 h-4" style={{ color: 'var(--text-secondary)' }} />
-                        <div>
-                          <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                            Confidence
-                          </div>
-                          <div className={`font-semibold ${getSignalColor(prediction.signal_type)}`}>
-                            {prediction.confidence.toFixed(1)}%
+                      {signal.signalAnalysis?.primaryConfidence && (
+                        <div className="flex items-center gap-2">
+                          <Target className="w-4 h-4" style={{ color: 'var(--text-secondary)' }} />
+                          <div>
+                            <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                              Confidence
+                            </div>
+                            <div className={`font-semibold ${getSignalColor(signal.signalAnalysis?.primarySignal)}`}>
+                              {signal.signalAnalysis.primaryConfidence.toFixed(1)}%
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      )}
 
                       {/* Screening Score */}
                       <div className="flex items-center gap-2">
@@ -358,117 +378,39 @@ const PredictionsHistory: React.FC = () => {
                             Score
                           </div>
                           <div className="font-semibold" style={{ color: 'var(--text-primary)' }}>
-                            {prediction.screening_score.toFixed(1)}
+                            {signal.screeningScore?.toFixed(1) || 'N/A'}
                           </div>
                         </div>
                       </div>
 
                       {/* RSI */}
-                      {prediction.rsi && (
+                      {signal.rsi && (
                         <div className="flex items-center gap-2">
                           <Activity className="w-4 h-4" style={{ color: 'var(--text-secondary)' }} />
                           <div>
                             <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
                               RSI
                             </div>
-                            <div className="font-semibold" style={{ color: 'var(--text-primary)' }}>
-                              {prediction.rsi.toFixed(1)}
+                            <div className={`font-semibold ${
+                              signal.rsi > 70 ? 'text-red-600' :
+                              signal.rsi < 30 ? 'text-green-600' : ''
+                            }`} style={{ color: signal.rsi >= 30 && signal.rsi <= 70 ? 'var(--text-primary)' : undefined }}>
+                              {signal.rsi.toFixed(1)}
                             </div>
                           </div>
                         </div>
                       )}
 
-                      {/* Volume */}
-                      {prediction.volume && (
+                      {/* Volume Ratio */}
+                      {signal.volumeRatio && (
                         <div className="flex items-center gap-2">
                           <BarChart3 className="w-4 h-4" style={{ color: 'var(--text-secondary)' }} />
                           <div>
                             <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                              Volume
+                              Volume Ratio
                             </div>
                             <div className="font-semibold" style={{ color: 'var(--text-primary)' }}>
-                              {(prediction.volume / 1000000).toFixed(1)}M
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Price Predictions */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                      {prediction.predicted_price_1h && (
-                        <div className="bg-white/5 rounded-lg p-3">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                                1H Prediction
-                              </div>
-                              <div className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-                                ${formatPrice(prediction.predicted_price_1h)}
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              {(() => {
-                                const change = getPriceChange(prediction.current_price, prediction.predicted_price_1h);
-                                return change && (
-                                  <div className={`flex items-center gap-1 ${change > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                    {change > 0 ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
-                                    <span className="text-sm">{Math.abs(change).toFixed(2)}%</span>
-                                  </div>
-                                );
-                              })()}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {prediction.predicted_price_1d && (
-                        <div className="bg-white/5 rounded-lg p-3">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                                1D Prediction
-                              </div>
-                              <div className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-                                ${formatPrice(prediction.predicted_price_1d)}
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              {(() => {
-                                const change = getPriceChange(prediction.current_price, prediction.predicted_price_1d);
-                                return change && (
-                                  <div className={`flex items-center gap-1 ${change > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                    {change > 0 ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
-                                    <span className="text-sm">{Math.abs(change).toFixed(2)}%</span>
-                                  </div>
-                                );
-                              })()}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {prediction.predicted_price_1w && (
-                        <div className="bg-white/5 rounded-lg p-3">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                                1W Prediction
-                              </div>
-                              <div className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-                                ${formatPrice(prediction.predicted_price_1w)}
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              {(() => {
-                                const change = getPriceChange(prediction.current_price, prediction.predicted_price_1w);
-                                return change && (
-                                  <div className={`flex items-center gap-1 ${change > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                    {change > 0 ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
-                                    <span className="text-sm">{Math.abs(change).toFixed(2)}%</span>
-                                  </div>
-                                );
-                              })()}
+                              {signal.volumeRatio.toFixed(2)}x
                             </div>
                           </div>
                         </div>
@@ -476,19 +418,23 @@ const PredictionsHistory: React.FC = () => {
                     </div>
 
                     {/* Reasons */}
-                    {prediction.primary_reasons && prediction.primary_reasons.length > 0 && (
+                    {signal.signalAnalysis?.primaryReasons && signal.signalAnalysis.primaryReasons.length > 0 && (
                       <div className="bg-white/5 rounded-lg p-3">
                         <h4 className="text-sm font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>
                           Key Signals
                         </h4>
-                        <div className="space-y-1">
-                          {prediction.primary_reasons.slice(0, 3).map((reason, idx) => (
-                            <div key={idx} className="flex items-start gap-2">
-                              <div className="w-1 h-1 rounded-full bg-current mt-2 flex-shrink-0" />
-                              <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-                                {reason}
-                              </span>
-                            </div>
+                        <div className="flex flex-wrap gap-2">
+                          {signal.signalAnalysis.primaryReasons.slice(0, 4).map((reason, idx) => (
+                            <span
+                              key={idx}
+                              className={`px-2 py-1 rounded text-xs ${
+                                signal.signalAnalysis?.primarySignal === 'BULLISH' ? 'bg-green-600/10 text-green-600' :
+                                signal.signalAnalysis?.primarySignal === 'BEARISH' ? 'bg-red-600/10 text-red-600' :
+                                'bg-orange-500/10 text-orange-500'
+                              }`}
+                            >
+                              {reason}
+                            </span>
                           ))}
                         </div>
                       </div>
@@ -497,14 +443,14 @@ const PredictionsHistory: React.FC = () => {
                 </motion.div>
               ))}
 
-              {filteredPredictions.length === 0 && (
+              {filteredSignals.length === 0 && (
                 <div className="text-center py-12">
                   <Eye className="w-16 h-16 mx-auto mb-4 opacity-30" style={{ color: 'var(--text-secondary)' }} />
                   <h3 className="text-xl font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
-                    No predictions found
+                    No signals found
                   </h3>
                   <p style={{ color: 'var(--text-secondary)' }}>
-                    Try adjusting your filters or time range
+                    Try adjusting your filters or search criteria
                   </p>
                 </div>
               )}

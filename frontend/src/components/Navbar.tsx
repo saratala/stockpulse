@@ -20,40 +20,47 @@ const Navbar = () => {
           StockPulse
         </Link>
         <div className="space-x-6">
-          <Link 
-            to="/" 
+          <Link
+            to="/"
             className="transition-colors duration-200 hover:brightness-75"
             style={{ color: 'var(--text-secondary)' }}
           >
             Dashboard
           </Link>
-          <Link 
-            to="/predictions" 
-            className="transition-colors duration-200 hover:brightness-75"
-            style={{ color: 'var(--text-secondary)' }}
-          >
-            Predictions
-          </Link>
-          <Link 
-            to="/predictions-history" 
-            className="transition-colors duration-200 hover:brightness-75"
-            style={{ color: 'var(--text-secondary)' }}
-          >
-            History
-          </Link>
-          <Link 
-            to="/screener" 
+          <Link
+            to="/screener"
             className="transition-colors duration-200 hover:brightness-75"
             style={{ color: 'var(--text-secondary)' }}
           >
             Screener
           </Link>
-          <Link 
-            to="/llm-sentiment" 
+          <Link
+            to="/predictions-history"
             className="transition-colors duration-200 hover:brightness-75"
             style={{ color: 'var(--text-secondary)' }}
           >
-            LLM Sentiment
+            History
+          </Link>
+          <Link
+            to="/backtesting"
+            className="transition-colors duration-200 hover:brightness-75"
+            style={{ color: 'var(--text-secondary)' }}
+          >
+            Backtesting
+          </Link>
+          <Link
+            to="/ai-analysis"
+            className="transition-colors duration-200 hover:brightness-75"
+            style={{ color: 'var(--text-secondary)' }}
+          >
+            AI Analysis
+          </Link>
+          <Link
+            to="/accuracy"
+            className="transition-colors duration-200 hover:brightness-75"
+            style={{ color: 'var(--text-secondary)' }}
+          >
+            Accuracy
           </Link>
         </div>
       </div>

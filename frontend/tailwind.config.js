@@ -9,19 +9,46 @@ module.exports = {
       backdropBlur: {
         xs: '2px',
       },
+      colors: {
+        // 2025/2026 Modern Dark Theme
+        slate: {
+          900: '#0F172A',
+          800: '#1E293B',
+          700: '#334155',
+          600: '#475569',
+          500: '#64748B',
+          400: '#94A3B8',
+          300: '#CBD5E1',
+          200: '#E2E8F0',
+          100: '#F1F5F9',
+          50: '#F8FAFC',
+        },
+        accent: {
+          indigo: '#6366F1',
+          violet: '#8B5CF6',
+          cyan: '#06B6D4',
+        },
+        signal: {
+          bullish: '#10B981',
+          bearish: '#EF4444',
+          neutral: '#F59E0B',
+        },
+      },
       backgroundColor: {
-        glass: 'rgba(255, 255, 255, 0.1)',
-        'glass-strong': 'rgba(255, 255, 255, 0.2)',
-        'glass-subtle': 'rgba(255, 255, 255, 0.05)',
+        glass: 'rgba(30, 41, 59, 0.8)',
+        'glass-strong': 'rgba(51, 65, 85, 0.9)',
+        'glass-subtle': 'rgba(30, 41, 59, 0.5)',
       },
       borderColor: {
-        glass: 'rgba(255, 255, 255, 0.2)',
-        'glass-strong': 'rgba(255, 255, 255, 0.3)',
+        glass: 'rgba(148, 163, 184, 0.2)',
+        'glass-strong': 'rgba(148, 163, 184, 0.3)',
       },
       boxShadow: {
-        glass: '0 8px 32px rgba(0, 0, 0, 0.37)',
-        'glass-small': '0 4px 16px rgba(0, 0, 0, 0.2)',
+        glass: '0 8px 32px rgba(0, 0, 0, 0.4)',
+        'glass-small': '0 4px 16px rgba(0, 0, 0, 0.3)',
         'glass-large': '0 16px 64px rgba(0, 0, 0, 0.5)',
+        'glow-indigo': '0 0 40px rgba(99, 102, 241, 0.3)',
+        'glow-cyan': '0 0 40px rgba(6, 182, 212, 0.3)',
       },
       animation: {
         'liquid-flow': 'liquidFlow 3s ease-in-out infinite',

@@ -4,54 +4,61 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
-  /* Tailwind-Based Design System - Light Background + Dark Components */
-  /* 1. Background - Morning Sky */
-  --bg-primary: #CAE4DB; /* Morning Sky background */
-  --bg-secondary: #B8D7CD; /* Slightly darker Morning Sky */
-  --bg-tertiary: #A6CABF; /* Even darker Morning Sky */
+  /* 2025/2026 Modern Fintech Design System - Dark Mode */
+  /* 1. Background - Deep Slate/Midnight */
+  --bg-primary: #0F172A; /* Slate 900 - Main background */
+  --bg-secondary: #1E293B; /* Slate 800 - Secondary panels */
+  --bg-tertiary: #334155; /* Slate 700 - Elevated surfaces */
 
-  /* 2. Glass Components - Very Subtle Dark Glass */
-  --glass-primary: rgba(255, 255, 255, 0.04); /* Tailwind glass value */
-  --glass-secondary: rgba(255, 255, 255, 0.02);
-  --glass-border: rgba(28, 28, 30, 0.1);
-  
-  /* 3. Signal Colors - Darker Green + Tailwind Values */
-  --signal-bullish: #2E7D32; /* darker green */
-  --signal-bearish: #F44336; /* red */
-  --signal-neutral: #FF9800; /* orange for better contrast */
-  --signal-accent: #00C896; /* accent */
-  
-  /* Text Colors - Dark on Light Background */
-  --text-primary: #1C1C1E; /* Heading/Text */
-  --text-secondary: #636366; /* Secondary text */
-  --text-tertiary: rgba(99, 99, 102, 0.7);
+  /* 2. Glass Components - Frosted Dark Glass */
+  --glass-primary: rgba(30, 41, 59, 0.8); /* Semi-transparent slate */
+  --glass-secondary: rgba(51, 65, 85, 0.6);
+  --glass-border: rgba(148, 163, 184, 0.2); /* Slate 400 with opacity */
 
-  /* Glass Effects - Tailwind Shadow */
-  --shadow-glass: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
-  --shadow-glass-small: 0 4px 16px 0 rgba(31, 38, 135, 0.2);
-  --shadow-glass-large: 0 12px 48px 0 rgba(31, 38, 135, 0.5);
+  /* 3. Signal Colors - Vibrant Modern Palette */
+  --signal-bullish: #10B981; /* Emerald 500 - Modern green */
+  --signal-bearish: #EF4444; /* Red 500 */
+  --signal-neutral: #F59E0B; /* Amber 500 */
+  --signal-accent: #6366F1; /* Indigo 500 - Primary accent */
 
-  /* Card Colors - Dark Glass Components */
-  --card-primary: rgba(255, 255, 255, 0.04);
-  --card-secondary: rgba(255, 255, 255, 0.06);
-  --card-accent: rgba(0, 200, 150, 0.1);
+  /* 4. Accent Colors - Cyan/Purple gradient feel */
+  --accent-primary: #6366F1; /* Indigo 500 */
+  --accent-secondary: #8B5CF6; /* Violet 500 */
+  --accent-tertiary: #06B6D4; /* Cyan 500 */
+  --accent-glow: rgba(99, 102, 241, 0.4);
 
-  /* Header Colors - Dark Glass Components */
-  --header-bg: var(--card-primary);
+  /* Text Colors - Light on Dark Background */
+  --text-primary: #F8FAFC; /* Slate 50 */
+  --text-secondary: #94A3B8; /* Slate 400 */
+  --text-tertiary: rgba(148, 163, 184, 0.7); /* Slate 400 with opacity */
+
+  /* Glass Effects - Modern Shadows */
+  --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+  --shadow-glass-small: 0 4px 16px 0 rgba(0, 0, 0, 0.3);
+  --shadow-glass-large: 0 16px 64px 0 rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 40px rgba(99, 102, 241, 0.15);
+
+  /* Card Colors - Elevated Dark Glass */
+  --card-primary: rgba(30, 41, 59, 0.7);
+  --card-secondary: rgba(51, 65, 85, 0.5);
+  --card-accent: rgba(99, 102, 241, 0.15);
+
+  /* Header Colors */
+  --header-bg: rgba(15, 23, 42, 0.9);
   --header-border: var(--glass-border);
 
-  /* Blur values - Tailwind Values */
+  /* Blur values */
   --blur-sm: 4px;
-  --blur-md: 8px;
-  --blur-lg: 12px;
-  --blur-xl: 20px;
+  --blur-md: 12px;
+  --blur-lg: 20px;
+  --blur-xl: 32px;
 
   /* Transition Effects */
   --transition-fast: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-normal: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   --transition-slow: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 
-  /* Font Family - SF Pro Display with Fallbacks */
+  /* Font Family */
   --font-family: 'SF Pro Display', 'Inter', system-ui, -apple-system, sans-serif;
 }
 
@@ -182,35 +189,35 @@
     0 0 20px rgba(46, 125, 50, 0.1);
 }
 
-/* Text colors for sentiment cards */
+/* Text colors for sentiment cards - Dark Mode */
 .glass-sentiment-card .sentiment-text-primary {
-  color: #1B5E20; /* Dark green for primary text */
+  color: #F8FAFC; /* Slate 50 - Primary text */
   font-weight: 600;
   transition: color 0.3s ease;
 }
 
 .glass-sentiment-card .sentiment-text-secondary {
-  color: #2E7D32; /* Medium dark green for secondary text */
+  color: #CBD5E1; /* Slate 300 - Secondary text */
   font-weight: 500;
   transition: color 0.3s ease;
 }
 
 .glass-sentiment-card .sentiment-text-tertiary {
-  color: #388E3C; /* Lighter dark green for tertiary text */
+  color: #94A3B8; /* Slate 400 - Tertiary text */
   font-weight: 400;
   transition: color 0.3s ease;
 }
 
 .glass-sentiment-card:hover .sentiment-text-primary {
-  color: #0D4416; /* Even darker on hover */
+  color: #FFFFFF;
 }
 
 .glass-sentiment-card:hover .sentiment-text-secondary {
-  color: #1B5E20;
+  color: #E2E8F0; /* Slate 200 */
 }
 
 .glass-sentiment-card:hover .sentiment-text-tertiary {
-  color: #2E7D32;
+  color: #CBD5E1;
 }
 
 /* Ticker Button Glass - Enhanced visibility */
@@ -266,24 +273,24 @@
   font-weight: 500;
 }
 
-/* Selected Ticker Button - Creative and Prominent */
+/* Selected Ticker Button - Modern Indigo Accent */
 .glass-ticker-selected {
-  background: linear-gradient(135deg, 
-    rgba(46, 125, 50, 0.3) 0%, 
-    rgba(56, 142, 60, 0.25) 50%, 
-    rgba(76, 175, 80, 0.2) 100%
+  background: linear-gradient(135deg,
+    rgba(99, 102, 241, 0.3) 0%,
+    rgba(139, 92, 246, 0.25) 50%,
+    rgba(6, 182, 212, 0.2) 100%
   );
   backdrop-filter: blur(var(--blur-md));
   -webkit-backdrop-filter: blur(var(--blur-md));
-  border: 2px solid rgba(76, 175, 80, 0.6);
+  border: 2px solid rgba(99, 102, 241, 0.6);
   border-radius: 8px;
   position: relative;
   overflow: hidden;
   transform: scale(1.05);
-  box-shadow: 
-    0 4px 20px rgba(46, 125, 50, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3),
-    0 0 20px rgba(76, 175, 80, 0.3);
+  box-shadow:
+    0 4px 20px rgba(99, 102, 241, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 0 20px rgba(99, 102, 241, 0.3);
   transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   animation: border-glow 3s infinite ease-in-out;
 }
@@ -312,18 +319,18 @@
 
 .glass-ticker-selected:hover {
   transform: scale(1.08);
-  box-shadow: 
-    0 6px 25px rgba(46, 125, 50, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4),
-    0 0 25px rgba(76, 175, 80, 0.4);
+  box-shadow:
+    0 6px 25px rgba(99, 102, 241, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 0 25px rgba(139, 92, 246, 0.4);
 }
 
 /* Selected ticker text styling */
 .glass-ticker-selected .ticker-text {
-  color: #1B5E20;
+  color: #F8FAFC;
   font-weight: 700;
   font-size: 1.1em;
-  text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   position: relative;
   z-index: 2;
   letter-spacing: 0.5px;
@@ -332,31 +339,31 @@
 }
 
 @keyframes pulse-glow {
-  0%, 100% { 
-    text-shadow: 0 1px 2px rgba(255, 255, 255, 0.5);
+  0%, 100% {
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   }
-  50% { 
-    text-shadow: 
-      0 1px 2px rgba(255, 255, 255, 0.8),
-      0 0 8px rgba(76, 175, 80, 0.6);
+  50% {
+    text-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.5),
+      0 0 8px rgba(99, 102, 241, 0.6);
   }
 }
 
 
 @keyframes border-glow {
-  0%, 100% { 
-    border-color: rgba(76, 175, 80, 0.6);
-    box-shadow: 
-      0 4px 20px rgba(46, 125, 50, 0.4),
-      inset 0 1px 0 rgba(255, 255, 255, 0.3),
-      0 0 20px rgba(76, 175, 80, 0.3);
+  0%, 100% {
+    border-color: rgba(99, 102, 241, 0.6);
+    box-shadow:
+      0 4px 20px rgba(99, 102, 241, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2),
+      0 0 20px rgba(99, 102, 241, 0.3);
   }
-  50% { 
-    border-color: rgba(76, 175, 80, 0.8);
-    box-shadow: 
-      0 4px 20px rgba(46, 125, 50, 0.5),
-      inset 0 1px 0 rgba(255, 255, 255, 0.4),
-      0 0 25px rgba(76, 175, 80, 0.5);
+  50% {
+    border-color: rgba(139, 92, 246, 0.8);
+    box-shadow:
+      0 4px 20px rgba(99, 102, 241, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.3),
+      0 0 25px rgba(139, 92, 246, 0.5);
   }
 }
 
@@ -668,32 +675,32 @@
 
 .glass-signal-card.bullish {
   --signal-color: var(--signal-bullish);
-  border-color: rgba(46, 125, 50, 0.3); /* darker green */
+  border-color: rgba(16, 185, 129, 0.4); /* Emerald 500 */
 }
 
 .glass-signal-card.bearish {
   --signal-color: var(--signal-bearish);
-  border-color: rgba(244, 67, 54, 0.3);
+  border-color: rgba(239, 68, 68, 0.4); /* Red 500 */
 }
 
 .glass-signal-card.neutral {
   --signal-color: var(--signal-neutral);
-  border-color: rgba(255, 152, 0, 0.3); /* orange */
+  border-color: rgba(245, 158, 11, 0.4); /* Amber 500 */
 }
 
 .glass-signal-card:hover.bullish {
   border-color: var(--signal-bullish);
-  box-shadow: 0 8px 32px rgba(46, 125, 50, 0.2); /* darker green */
+  box-shadow: 0 8px 32px rgba(16, 185, 129, 0.3);
 }
 
 .glass-signal-card:hover.bearish {
   border-color: var(--signal-bearish);
-  box-shadow: 0 8px 32px rgba(244, 67, 54, 0.2);
+  box-shadow: 0 8px 32px rgba(239, 68, 68, 0.3);
 }
 
 .glass-signal-card:hover.neutral {
   border-color: var(--signal-neutral);
-  box-shadow: 0 8px 32px rgba(255, 152, 0, 0.2); /* orange */
+  box-shadow: 0 8px 32px rgba(245, 158, 11, 0.3);
 }
 
 @keyframes shimmer {

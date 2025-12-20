@@ -125,6 +125,14 @@ app:
       long-term: 0.2
       negligible: 0.1
   
+  # Finnhub Real-Time WebSocket Configuration
+  finnhub:
+    api-key: ${FINNHUB_API_KEY:}
+    websocket-url: wss://ws.finnhub.io
+    enabled: ${FINNHUB_REALTIME_ENABLED:true}
+    reconnect-delay-ms: 5000
+    heartbeat-interval-ms: 30000
+
   # News API Configuration
   news:
     api:
