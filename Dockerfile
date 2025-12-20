@@ -223,7 +223,8 @@ exec /usr/bin/supervisord -c /etc/supervisor/supervisord.conf \n\
 # ============================================
 # Environment variables
 # ============================================
-ENV JAVA_OPTS="-Xmx1g -Xms512m -XX:+UseG1GC -Dspring.profiles.active=docker"
+# Use default profile (not docker) since services are on localhost
+ENV JAVA_OPTS="-Xmx1g -Xms512m -XX:+UseG1GC"
 ENV SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/stockpulse
 ENV SPRING_DATASOURCE_USERNAME=postgres
 ENV SPRING_DATASOURCE_PASSWORD=postgres
