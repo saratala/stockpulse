@@ -6,14 +6,57 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.PostConstruct;
+import java.time.LocalDate;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
 @ConditionalOnProperty(name = "app.scheduling.enabled", havingValue = "true", matchIfMissing = true)
 public class ScheduledDataService {
-    
+
     private final RealTimeDataService realTimeDataService;
     private final SentimentAnalysisService sentimentAnalysisService;
+
+    @PostConstruct
+    public void initializeData() {
+        log.info("=== StockPulse Data Initialization Starting ===");
+
+        // Run initialization in a separate thread to not block startup
+        new Thread(() -> {
+            try {
+                // Wait for database to be fully ready
+                Thread.sleep(10000);
+
+                log.info("Loading historical data for current year...");
+                int currentYear = LocalDate.now().getYear();
+                int recordsLoaded = realTimeDataService.loadYearlyData(currentYear);
+                log.info("Loaded {} historical records for year {}", recordsLoaded, currentYear);
+
+                // Also load previous year for better backtesting
+                int previousYear = currentYear - 1;
+                int prevYearRecords = realTimeDataService.loadYearlyData(previousYear);
+                log.info("Loaded {} historical records for year {}", prevYearRecords, previousYear);
+
+                // Run initial data update
+                log.info("Running initial real-time data update...");
+                realTimeDataService.updateRealTimeData();
+
+                // Run initial screening
+                log.info("Running initial screening...");
+                realTimeDataService.updateScreeningResults();
+
+                // Generate initial predictions
+                log.info("Generating initial predictions...");
+                realTimeDataService.generateSignalPredictions();
+
+                log.info("=== StockPulse Data Initialization Complete ===");
+
+            } catch (Exception e) {
+                log.error("Error during data initialization", e);
+            }
+        }, "data-init-thread").start();
+    }
     
     @Scheduled(cron = "${app.scheduling.price-updates.cron:0 */5 * * * *}")
     public void updatePriceData() {
