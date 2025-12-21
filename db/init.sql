@@ -384,3 +384,60 @@ CREATE TABLE IF NOT EXISTS paper_trading_account (
 INSERT INTO paper_trading_account (account_name, initial_balance, current_balance)
 VALUES ('default', 100000, 100000)
 ON CONFLICT (account_name) DO NOTHING;
+
+-- -------------------------
+-- Table: screening_results (stores stock screening/scoring data)
+-- -------------------------
+CREATE TABLE IF NOT EXISTS screening_results (
+    id SERIAL PRIMARY KEY,
+    ticker TEXT NOT NULL REFERENCES stocks(ticker),
+    name TEXT NOT NULL,
+    sector TEXT,
+    screening_date TIMESTAMPTZ NOT NULL,
+    current_price NUMERIC(10,2) NOT NULL,
+    screening_score NUMERIC(5,2) NOT NULL,
+    change_percent NUMERIC(5,2),
+    volume BIGINT NOT NULL,
+    volume_ratio NUMERIC(5,2),
+    ema_stack_aligned BOOLEAN,
+    adx_strength NUMERIC(5,2),
+    stoch_position NUMERIC(5,2),
+    rsi NUMERIC(5,2),
+    market_cap BIGINT,
+    pe_ratio NUMERIC(8,2),
+    beta NUMERIC(5,2),
+    fifty_two_week_high NUMERIC(10,2),
+    fifty_two_week_low NUMERIC(10,2),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_screening_ticker_date ON screening_results (ticker, screening_date);
+CREATE INDEX IF NOT EXISTS idx_screening_date ON screening_results (screening_date);
+CREATE INDEX IF NOT EXISTS idx_screening_score ON screening_results (screening_score);
+
+-- -------------------------
+-- Table: heikin_ashi_signals (Heikin-Ashi candlestick analysis signals)
+-- -------------------------
+CREATE TABLE IF NOT EXISTS heikin_ashi_signals (
+    id SERIAL PRIMARY KEY,
+    ticker TEXT NOT NULL REFERENCES stocks(ticker),
+    analysis_date TIMESTAMPTZ NOT NULL,
+    primary_signal TEXT NOT NULL,
+    primary_confidence NUMERIC(5,2) NOT NULL,
+    reversal_signal TEXT,
+    reversal_confidence NUMERIC(5,2),
+    current_price NUMERIC(10,2) NOT NULL,
+    trend_strength TEXT,
+    risk_level TEXT,
+    support_level NUMERIC(10,2),
+    resistance_level NUMERIC(10,2),
+    pivot_level NUMERIC(10,2),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT primary_signal_values CHECK (primary_signal IN ('BULLISH', 'BEARISH', 'NEUTRAL')),
+    CONSTRAINT reversal_signal_values CHECK (reversal_signal IS NULL OR reversal_signal IN ('BULLISH_REVERSAL', 'BEARISH_REVERSAL', 'NO_REVERSAL')),
+    CONSTRAINT trend_strength_values CHECK (trend_strength IS NULL OR trend_strength IN ('STRONG', 'MODERATE', 'WEAK')),
+    CONSTRAINT risk_level_values CHECK (risk_level IS NULL OR risk_level IN ('LOW', 'MEDIUM', 'HIGH'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_heikin_ashi_ticker_date ON heikin_ashi_signals (ticker, analysis_date);
+CREATE INDEX IF NOT EXISTS idx_heikin_ashi_date ON heikin_ashi_signals (analysis_date);
