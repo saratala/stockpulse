@@ -128,27 +128,26 @@ public class PredictionValidationService {
         // Determine if direction was correct
         boolean directionCorrect = isDirectionCorrect(prediction.getSignalType(), actualChangePercent);
 
-        // Create validation record
-        PredictionValidation validation = PredictionValidation.builder()
-                .ticker(prediction.getTicker())
-                .predictionTimestamp(prediction.getTimestamp())
-                .validationTimestamp(LocalDateTime.now())
-                .timeframe(timeframe)
-                .signalType(prediction.getSignalType().name())
-                .predictedPrice(predictedPrice)
-                .predictionPrice(predictionPrice)
-                .confidence(confidence)
-                .actualPrice(actualPrice)
-                .predictedChangePercent(predictedChangePercent)
-                .actualChangePercent(actualChangePercent)
-                .priceError(priceError)
-                .priceErrorPercent(priceErrorPercent)
-                .directionCorrect(directionCorrect)
-                .within5Percent(priceErrorPercent <= 5)
-                .within10Percent(priceErrorPercent <= 10)
-                .build();
-
-        validationRepository.save(validation);
+        // Use native insert to handle TimescaleDB composite key with auto-generated id
+        LocalDateTime validationTimestamp = LocalDateTime.now();
+        validationRepository.insertValidation(
+                prediction.getTicker(),
+                prediction.getTimestamp(),
+                validationTimestamp,
+                timeframe,
+                prediction.getSignalType().name(),
+                predictedPrice,
+                predictionPrice,
+                confidence,
+                actualPrice,
+                predictedChangePercent,
+                actualChangePercent,
+                priceError,
+                priceErrorPercent,
+                directionCorrect,
+                priceErrorPercent <= 5,
+                priceErrorPercent <= 10
+        );
 
         log.debug("Validated {}/{}: predicted={}, actual={}, error={}%, direction={}",
                 prediction.getTicker(), timeframe, predictedPrice, actualPrice,

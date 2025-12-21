@@ -3,6 +3,7 @@ package com.stockpulse.agent.repository;
 import com.stockpulse.agent.model.PredictionValidation;
 import com.stockpulse.agent.model.PredictionValidationId;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -69,4 +70,32 @@ public interface PredictionValidationRepository extends JpaRepository<Prediction
            "WHERE pv.validationTimestamp >= :since " +
            "GROUP BY pv.signalType")
     List<Object[]> getSignalTypePerformance(@Param("since") LocalDateTime since);
+
+    // Native insert to handle composite key with auto-generated id
+    @Modifying
+    @Query(value = "INSERT INTO prediction_validations (ticker, prediction_timestamp, validation_timestamp, " +
+           "timeframe, signal_type, predicted_price, prediction_price, confidence, actual_price, " +
+           "predicted_change_percent, actual_change_percent, price_error, price_error_percent, " +
+           "direction_correct, within_5_percent, within_10_percent) " +
+           "VALUES (:ticker, :predictionTimestamp, :validationTimestamp, :timeframe, :signalType, " +
+           ":predictedPrice, :predictionPrice, :confidence, :actualPrice, :predictedChangePercent, " +
+           ":actualChangePercent, :priceError, :priceErrorPercent, :directionCorrect, " +
+           ":within5Percent, :within10Percent)", nativeQuery = true)
+    void insertValidation(
+            @Param("ticker") String ticker,
+            @Param("predictionTimestamp") LocalDateTime predictionTimestamp,
+            @Param("validationTimestamp") LocalDateTime validationTimestamp,
+            @Param("timeframe") String timeframe,
+            @Param("signalType") String signalType,
+            @Param("predictedPrice") Double predictedPrice,
+            @Param("predictionPrice") Double predictionPrice,
+            @Param("confidence") Double confidence,
+            @Param("actualPrice") Double actualPrice,
+            @Param("predictedChangePercent") Double predictedChangePercent,
+            @Param("actualChangePercent") Double actualChangePercent,
+            @Param("priceError") Double priceError,
+            @Param("priceErrorPercent") Double priceErrorPercent,
+            @Param("directionCorrect") Boolean directionCorrect,
+            @Param("within5Percent") Boolean within5Percent,
+            @Param("within10Percent") Boolean within10Percent);
 }
