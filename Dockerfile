@@ -86,9 +86,11 @@ ENV SPRING_DATASOURCE_USERNAME=postgres
 ENV SPRING_DATASOURCE_PASSWORD=postgres
 ENV SPRING_DATA_REDIS_HOST=localhost
 ENV SPRING_DATA_REDIS_PORT=6379
-ENV PORT=80
 
-EXPOSE 80
+# PORT is set by Railway, default to 8080 if not set
+ENV PORT=8080
+
+EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=5 \
     CMD curl -f http://localhost:${PORT}/api/v1/health || exit 1
