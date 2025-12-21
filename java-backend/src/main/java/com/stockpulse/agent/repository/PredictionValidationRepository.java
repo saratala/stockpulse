@@ -1,6 +1,7 @@
 package com.stockpulse.agent.repository;
 
 import com.stockpulse.agent.model.PredictionValidation;
+import com.stockpulse.agent.model.PredictionValidationId;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -10,7 +11,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Repository
-public interface PredictionValidationRepository extends JpaRepository<PredictionValidation, Long> {
+public interface PredictionValidationRepository extends JpaRepository<PredictionValidation, PredictionValidationId> {
 
     List<PredictionValidation> findByTickerOrderByValidationTimestampDesc(String ticker);
 

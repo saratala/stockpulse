@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "prediction_validations")
+@IdClass(PredictionValidationId.class)
 @Data
 @Builder
 @NoArgsConstructor
@@ -18,16 +19,18 @@ public class PredictionValidation {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id")
     private Long id;
+
+    @Id
+    @Column(name = "validation_timestamp", nullable = false)
+    private LocalDateTime validationTimestamp;
 
     @Column(nullable = false)
     private String ticker;
 
     @Column(name = "prediction_timestamp", nullable = false)
     private LocalDateTime predictionTimestamp;
-
-    @Column(name = "validation_timestamp", nullable = false)
-    private LocalDateTime validationTimestamp;
 
     @Column(nullable = false)
     private String timeframe; // '1h', '1d', '1w'
