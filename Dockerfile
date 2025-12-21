@@ -58,7 +58,8 @@ COPY --from=frontend-builder /app/frontend/build /usr/share/nginx/html
 
 # Copy database files
 COPY db/init.sql /app/init.sql
-COPY db/backup/stockpulse_data.sql /app/data.sql
+COPY db/backup/*.csv /app/backup/
+COPY db/backup/load_data.sql /app/backup/load_data.sql
 
 # Copy configuration files
 COPY scripts/start.sh /app/start.sh

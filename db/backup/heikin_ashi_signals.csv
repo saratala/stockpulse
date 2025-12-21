@@ -1,0 +1,3 @@
+ERROR:  relation "heikin_ashi_signals" does not exist
+LINE 1: COPY  ( SELECT * FROM heikin_ashi_signals ) TO STDOUT WITH C...
+                              ^

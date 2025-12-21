@@ -47,8 +47,31 @@ if [ ! -f "${PG_DATA}/postgresql.conf" ]; then
     sudo -u postgres createdb stockpulse
     echo "Loading schema..."
     sudo -u postgres psql stockpulse -f /app/init.sql || true
-    echo "Loading data..."
-    sudo -u postgres psql stockpulse -f /app/data.sql || true
+
+    # Load CSV data if available
+    if [ -f /app/backup/stocks.csv ]; then
+        echo "Loading pre-exported data from CSV files..."
+        sudo -u postgres psql stockpulse -c "\COPY stocks(id, ticker, name, sector, industry, market_cap, created_at, updated_at) FROM '/app/backup/stocks.csv' WITH CSV HEADER" || true
+        sudo -u postgres psql stockpulse -c "\COPY stock_prices(ticker, date, open, high, low, close, volume, adjusted_close) FROM '/app/backup/stock_prices.csv' WITH CSV HEADER" || true
+        sudo -u postgres psql stockpulse -c "\COPY screening_results(id, ticker, screening_date, overall_score, technical_score, sentiment_score, momentum_score, volume_score, rsi, macd, bollinger_position, volume_ratio, created_at) FROM '/app/backup/screening_results.csv' WITH CSV HEADER" || true
+        sudo -u postgres psql stockpulse -c "\COPY signal_predictions(id, ticker, signal_type, confidence, current_price, predicted_price_1h, predicted_price_1d, predicted_price_1w, rsi, macd, bollinger_position, volume, news_count, sentiment_score, sentiment_impact, sentiment_confidence, primary_reasons, sector, screening_score, timestamp, created_at) FROM '/app/backup/signal_predictions.csv' WITH CSV HEADER" || true
+        sudo -u postgres psql stockpulse -c "\COPY news_articles(id, ticker, title, url, source, published_at, summary, sentiment, created_at) FROM '/app/backup/news_articles.csv' WITH CSV HEADER" || true
+        sudo -u postgres psql stockpulse -c "\COPY sentiment_scores(id, ticker, score, magnitude, source, analysis_date, details, created_at) FROM '/app/backup/sentiment_scores.csv' WITH CSV HEADER" || true
+        sudo -u postgres psql stockpulse -c "\COPY prediction_validations(id, prediction_id, ticker, signal_type, predicted_price, actual_price, prediction_horizon, predicted_at, validated_at, price_difference, percentage_error, is_direction_correct, created_at) FROM '/app/backup/prediction_validations.csv' WITH CSV HEADER" || true
+
+        # Update sequences
+        sudo -u postgres psql stockpulse -c "SELECT setval('stocks_id_seq', COALESCE((SELECT MAX(id) FROM stocks), 1));" || true
+        sudo -u postgres psql stockpulse -c "SELECT setval('screening_results_id_seq', COALESCE((SELECT MAX(id) FROM screening_results), 1));" || true
+        sudo -u postgres psql stockpulse -c "SELECT setval('signal_predictions_id_seq', COALESCE((SELECT MAX(id) FROM signal_predictions), 1));" || true
+        sudo -u postgres psql stockpulse -c "SELECT setval('news_articles_id_seq', COALESCE((SELECT MAX(id) FROM news_articles), 1));" || true
+        sudo -u postgres psql stockpulse -c "SELECT setval('sentiment_scores_id_seq', COALESCE((SELECT MAX(id) FROM sentiment_scores), 1));" || true
+        sudo -u postgres psql stockpulse -c "SELECT setval('prediction_validations_id_seq', COALESCE((SELECT MAX(id) FROM prediction_validations), 1));" || true
+
+        echo "CSV data loaded successfully!"
+        sudo -u postgres psql stockpulse -c "SELECT 'stocks' as tbl, COUNT(*) FROM stocks UNION ALL SELECT 'stock_prices', COUNT(*) FROM stock_prices UNION ALL SELECT 'screening_results', COUNT(*) FROM screening_results;"
+    else
+        echo "No CSV backup files found, database will start empty."
+    fi
     echo "Database created and data loaded!"
 
     # Stop PostgreSQL (supervisor will restart it)
