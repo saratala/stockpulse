@@ -45,6 +45,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     supervisor \
     sudo \
+    gettext-base \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -62,10 +63,10 @@ COPY db/backup/stockpulse_data.sql /app/data.sql
 # Copy configuration files
 COPY scripts/start.sh /app/start.sh
 COPY scripts/supervisord.conf /etc/supervisor/conf.d/stockpulse.conf
-COPY scripts/nginx.conf /etc/nginx/sites-enabled/stockpulse
+COPY scripts/nginx.conf /app/nginx.conf.template
 
-# Configure nginx
-RUN rm -f /etc/nginx/sites-enabled/default
+# Configure nginx - remove default site
+RUN rm -f /etc/nginx/sites-enabled/default /etc/nginx/sites-available/default
 
 # Configure Redis
 RUN sed -i 's/^bind .*/bind 127.0.0.1/' /etc/redis/redis.conf && \
@@ -90,6 +91,6 @@ ENV PORT=80
 EXPOSE 80
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=5 \
-    CMD curl -f http://localhost/api/v1/health || exit 1
+    CMD curl -f http://localhost:${PORT}/api/v1/health || exit 1
 
 CMD ["/app/start.sh"]
