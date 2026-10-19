@@ -16,7 +16,7 @@ services:
       - SPRING_DATASOURCE_PASSWORD=postgres
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
-      - FINNHUB_API_KEY=d0f5oj9r01qsv9efh66gd0f5oj9r01qsv9efh670
+      - FINNHUB_API_KEY=${FINNHUB_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - JAVA_OPTS=-Xmx2g -Xms1g -XX:+UseG1GC
     depends_on:

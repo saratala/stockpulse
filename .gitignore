@@ -49,3 +49,14 @@ pgdata/
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Gradle
+.gradle/
+java-backend/build/
+
+# Backups / scratch
+*.bak
+*.orig
+
+# Local logs
+*.log

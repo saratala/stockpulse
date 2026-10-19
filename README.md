@@ -59,7 +59,7 @@ A comprehensive real-time stock market analysis platform built with Java Spring 
 
 1. **Clone the repository**:
 ```bash
-git clone https://github.com/yourusername/stockpulse.git
+git clone https://github.com/saratala/stockpulse.git
 cd stockpulse
 ```
 
