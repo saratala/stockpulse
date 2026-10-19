@@ -41,3 +41,9 @@
 - Check logs: `docker-compose logs [service]`
 - Java backend container: `stockpulse-java-final`
 - Note: Python backend has been removed - Java backend handles all functionality
+
+### Auto-Trader (Alpaca)
+- Code lives in `java-backend/.../trading/`; `RiskGuard` is pure logic with unit tests in `src/test`
+- Disabled by default (`TRADING_ENABLED=false`), paper endpoint by default
+- Never change `ALPACA_BASE_URL` to the live endpoint without the user explicitly asking
+- Docs: `docs/PAPER_TRADING.md`

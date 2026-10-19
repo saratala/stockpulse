@@ -17,6 +17,10 @@ services:
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
       - FINNHUB_API_KEY=${FINNHUB_API_KEY}
+      - TRADING_ENABLED=${TRADING_ENABLED:-false}
+      - ALPACA_BASE_URL=${ALPACA_BASE_URL:-https://paper-api.alpaca.markets}
+      - ALPACA_KEY_ID=${ALPACA_KEY_ID:-}
+      - ALPACA_SECRET_KEY=${ALPACA_SECRET_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - JAVA_OPTS=-Xmx2g -Xms1g -XX:+UseG1GC
     depends_on:

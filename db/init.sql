@@ -441,3 +441,28 @@ CREATE TABLE IF NOT EXISTS heikin_ashi_signals (
 
 CREATE INDEX IF NOT EXISTS idx_heikin_ashi_ticker_date ON heikin_ashi_signals (ticker, analysis_date);
 CREATE INDEX IF NOT EXISTS idx_heikin_ashi_date ON heikin_ashi_signals (analysis_date);
+-- -------------------------
+-- Table: trade_executions (auto-trader audit log: every entry, exit, skip, and error)
+-- -------------------------
+CREATE TABLE IF NOT EXISTS trade_executions (
+    id SERIAL PRIMARY KEY,
+    ticker TEXT NOT NULL,
+    action TEXT NOT NULL,
+    side TEXT,
+    signal_prediction_id BIGINT,
+    signal_confidence NUMERIC(5,2),
+    notional NUMERIC(12,2),
+    reference_price NUMERIC(12,4),
+    take_profit_price NUMERIC(12,4),
+    stop_loss_price NUMERIC(12,4),
+    broker_order_id TEXT,
+    client_order_id TEXT,
+    reason TEXT,
+    mode TEXT NOT NULL DEFAULT 'paper',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT trade_exec_action_values CHECK (action IN ('ENTRY', 'EXIT', 'SKIPPED', 'ERROR')),
+    CONSTRAINT trade_exec_mode_values CHECK (mode IN ('paper', 'live'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_trade_exec_ticker_time ON trade_executions (ticker, created_at);
+CREATE INDEX IF NOT EXISTS idx_trade_exec_action ON trade_executions (action, created_at);
