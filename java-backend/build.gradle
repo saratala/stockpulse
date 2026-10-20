@@ -39,6 +39,10 @@ dependencies {
 
     // WebSocket support for real-time data
     implementation 'org.java-websocket:Java-WebSocket:1.5.4'
+
+    // AWS S3 SDK for bulk historical data
+    implementation platform('software.amazon.awssdk:bom:2.21.0')
+    implementation 'software.amazon.awssdk:s3'
     
     // JSON Processing
     implementation 'com.fasterxml.jackson.core:jackson-databind'

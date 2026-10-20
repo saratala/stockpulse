@@ -11,7 +11,9 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -22,15 +24,59 @@ public class ScreeningService {
     private final ScreeningResultRepository screeningResultRepository;
     
     public ScreeningResponse runStockScreener(int minScore, int maxResults, boolean includeSignals) {
-        log.info("Running stock screener with minScore={}, maxResults={}, includeSignals={}", 
-                minScore, maxResults, includeSignals);
-        
+        return runStockScreener(minScore, maxResults, includeSignals, "ALL");
+    }
+
+    public ScreeningResponse runStockScreener(int minScore, int maxResults, boolean includeSignals, String signalFilter) {
+        log.info("Running stock screener with minScore={}, maxResults={}, includeSignals={}, signalFilter={}",
+                minScore, maxResults, includeSignals, signalFilter);
+
         LocalDateTime since = LocalDateTime.now().minusHours(24);
-        
-        // Get recent screening results
-        List<ScreeningResult> results = screeningResultRepository
-            .findByScoreGreaterThanEqualAndScreeningDateAfter(BigDecimal.valueOf(minScore), since);
-        
+
+        // Get ALL recent screening results (no minScore filter for signal-based filtering)
+        List<ScreeningResult> rawResults = screeningResultRepository
+            .findRecentScreeningResults(since);
+
+        // Deduplicate: keep only the most recent result per ticker
+        Map<String, ScreeningResult> latestByTicker = rawResults.stream()
+            .collect(Collectors.toMap(
+                ScreeningResult::getTicker,
+                r -> r,
+                (existing, replacement) ->
+                    existing.getScreeningDate().isAfter(replacement.getScreeningDate()) ? existing : replacement
+            ));
+        List<ScreeningResult> allResults = latestByTicker.values().stream().collect(Collectors.toList());
+
+        log.info("Deduplicated {} raw results to {} unique tickers", rawResults.size(), allResults.size());
+
+        // Apply signal filter if specified
+        List<ScreeningResult> results;
+        if ("BULLISH".equalsIgnoreCase(signalFilter)) {
+            // Bullish: score >= 80
+            results = allResults.stream()
+                .filter(r -> r.getScreeningScore().compareTo(BigDecimal.valueOf(80)) >= 0)
+                .collect(Collectors.toList());
+        } else if ("BEARISH".equalsIgnoreCase(signalFilter)) {
+            // Bearish: score <= 60
+            results = allResults.stream()
+                .filter(r -> r.getScreeningScore().compareTo(BigDecimal.valueOf(60)) <= 0)
+                .collect(Collectors.toList());
+        } else if ("NEUTRAL".equalsIgnoreCase(signalFilter) || "SIDEWAYS".equalsIgnoreCase(signalFilter)) {
+            // Neutral/Sideways: 60 < score < 80
+            results = allResults.stream()
+                .filter(r -> r.getScreeningScore().compareTo(BigDecimal.valueOf(60)) > 0
+                          && r.getScreeningScore().compareTo(BigDecimal.valueOf(80)) < 0)
+                .collect(Collectors.toList());
+        } else {
+            // ALL: return everything, optionally filtered by minScore
+            results = allResults.stream()
+                .filter(r -> r.getScreeningScore().compareTo(BigDecimal.valueOf(minScore)) >= 0)
+                .collect(Collectors.toList());
+        }
+
+        // Sort by screening score descending
+        results.sort((a, b) -> b.getScreeningScore().compareTo(a.getScreeningScore()));
+
         // Limit results
         List<ScreeningResult> limitedResults = results.stream()
             .limit(maxResults)

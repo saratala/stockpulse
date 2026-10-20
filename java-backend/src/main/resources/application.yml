@@ -133,6 +133,55 @@ app:
     reconnect-delay-ms: 5000
     heartbeat-interval-ms: 30000
 
+  # Twelve Data API Configuration (for intraday data)
+  twelvedata:
+    api-key: ${TWELVEDATA_API_KEY:}
+    base-url: https://api.twelvedata.com
+    enabled: false  # Disabled - using Massive Data instead
+    rate-limit:
+      requests-per-minute: 8  # Free tier limit
+      delay-ms: 8000          # Delay between requests
+    intraday:
+      interval: 1min          # 1min, 5min, 15min, 30min, 1h
+      outputsize: 390         # Full trading day (6.5 hours * 60 minutes)
+      timezone: America/New_York
+    scheduler:
+      enabled: false
+      max-tickers-per-run: 8  # Limit to stay within API quota
+      cron: "0 0,30 9-16 * * MON-FRI"  # Every 30 min during market hours
+
+  # Massive Data API Configuration (for intraday data)
+  massivedata:
+    api-key: ${MASSIVEDATA_API_KEY:}
+    base-url: https://api.massive.com
+    enabled: true
+    rate-limit:
+      requests-per-minute: 5    # Free tier limit (5 requests/minute)
+      delay-ms: 12000           # 12 seconds between requests to stay within limits
+    timezone: America/New_York
+    scheduler:
+      enabled: true
+      max-tickers-per-run: 5    # Limit tickers per run for free tier
+      cron: "0 */30 9-16 * * MON-FRI"  # Every 30 min during market hours
+    # S3 Configuration for bulk historical data
+    s3:
+      enabled: true
+      access-key-id: ${MASSIVEDATA_S3_ACCESS_KEY:}
+      secret-access-key: ${MASSIVEDATA_S3_SECRET_KEY:}
+      endpoint: https://files.massive.com
+      bucket: flatfiles
+    # WebSocket Configuration for real-time streaming
+    websocket:
+      enabled: true
+      url: wss://delayed.massive.com/stocks  # Use wss://socket.massive.com/stocks for real-time (requires paid plan)
+      reconnect-delay-ms: 5000
+      heartbeat-interval-ms: 30000
+    # Historical data fetch configuration (runs during off-market hours)
+    historical-fetch:
+      enabled: true
+      days-back: 30  # How many days of historical data to fetch
+      cron: "0 */15 17-23,0-8 * * *"  # Every 15 min during off-market hours
+
   # News API Configuration
   news:
     api:

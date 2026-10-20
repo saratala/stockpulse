@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.stockpulse.agent.config.SP500Tickers;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -34,10 +35,8 @@ public class SentimentAnalysisService {
     @Value("${app.news.fetch.max-age-hours:48}")
     private int maxAgeHours;
     
-    // Default tickers as a fallback
-    private final List<String> defaultTickers = List.of(
-        "AAPL", "GOOGL", "MSFT", "AMZN", "TSLA", "META", "NVDA", "NFLX"
-    );
+    // Use the full S&P 500 ticker list from configuration
+    private final List<String> defaultTickers = SP500Tickers.getTickers();
     
     /**
      * Perform comprehensive sentiment analysis for a specific ticker

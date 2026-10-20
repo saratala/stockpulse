@@ -441,3 +441,78 @@ CREATE TABLE IF NOT EXISTS heikin_ashi_signals (
 
 CREATE INDEX IF NOT EXISTS idx_heikin_ashi_ticker_date ON heikin_ashi_signals (ticker, analysis_date);
 CREATE INDEX IF NOT EXISTS idx_heikin_ashi_date ON heikin_ashi_signals (analysis_date);
+
+-- -------------------------
+-- Table: stock_prices_intraday (minute-level time-series hypertable)
+-- -------------------------
+CREATE TABLE IF NOT EXISTS stock_prices_intraday (
+    ticker TEXT NOT NULL,
+    timestamp TIMESTAMPTZ NOT NULL,
+    open DOUBLE PRECISION NOT NULL,
+    high DOUBLE PRECISION NOT NULL,
+    low DOUBLE PRECISION NOT NULL,
+    close DOUBLE PRECISION NOT NULL,
+    volume BIGINT NOT NULL,
+    PRIMARY KEY (ticker, timestamp),
+    CONSTRAINT intraday_price_validation CHECK (
+        high >= low AND
+        high >= open AND
+        high >= close AND
+        low <= open AND
+        low <= close AND
+        volume >= 0
+    )
+);
+
+-- Convert to hypertable with 1-day chunks (optimal for minute-level data)
+SELECT create_hypertable('stock_prices_intraday', 'timestamp',
+    chunk_time_interval => INTERVAL '1 day',
+    if_not_exists => TRUE
+);
+
+-- Create indexes for intraday queries
+CREATE INDEX IF NOT EXISTS idx_intraday_ticker_time ON stock_prices_intraday (ticker, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_intraday_date ON stock_prices_intraday (((timestamp AT TIME ZONE 'UTC')::date), ticker);
+
+-- Enable compression on intraday hypertable
+ALTER TABLE stock_prices_intraday SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'ticker',
+    timescaledb.compress_orderby = 'timestamp DESC'
+);
+
+-- Add compression policy (compress after 1 week)
+SELECT add_compression_policy('stock_prices_intraday', INTERVAL '1 week');
+
+-- Add retention policy (5 years of minute data)
+SELECT add_retention_policy('stock_prices_intraday', INTERVAL '5 years');
+
+-- -------------------------
+-- Table: market_news (market-wide news and economic events)
+-- -------------------------
+CREATE TABLE IF NOT EXISTS market_news (
+    id SERIAL PRIMARY KEY,
+    title TEXT NOT NULL,
+    url TEXT UNIQUE NOT NULL,
+    published_at TIMESTAMPTZ NOT NULL,
+    source TEXT NOT NULL,
+    content TEXT,
+    category TEXT NOT NULL,
+    impact_level TEXT NOT NULL,
+    affected_sectors TEXT,
+    sentiment DOUBLE PRECISION,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT category_values CHECK (category IN (
+        'FED', 'EMPLOYMENT', 'CPI', 'GDP', 'PPI', 'RETAIL_SALES',
+        'HOUSING', 'MANUFACTURING', 'CONSUMER_SENTIMENT', 'EARNINGS_SEASON',
+        'GEOPOLITICAL', 'MARKET_OUTLOOK', 'TREASURY', 'CRYPTO', 'OTHER'
+    )),
+    CONSTRAINT impact_level_values CHECK (impact_level IN ('HIGH', 'MEDIUM', 'LOW')),
+    CONSTRAINT sentiment_range CHECK (sentiment IS NULL OR (sentiment >= -1 AND sentiment <= 1))
+);
+
+-- Create indexes for market news queries
+CREATE INDEX IF NOT EXISTS idx_market_news_category ON market_news (category);
+CREATE INDEX IF NOT EXISTS idx_market_news_published ON market_news (published_at DESC);
+CREATE INDEX IF NOT EXISTS idx_market_news_impact ON market_news (impact_level, published_at DESC);
+CREATE INDEX IF NOT EXISTS idx_market_news_sectors ON market_news (affected_sectors);
