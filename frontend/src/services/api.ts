@@ -700,6 +700,8 @@ export interface BacktestPerformance {
 
 export interface BacktestTrade {
   date: string;
+  entryTime?: string;
+  exitTime?: string;
   direction: string;
   entryPrice: number;
   exitPrice: number;
