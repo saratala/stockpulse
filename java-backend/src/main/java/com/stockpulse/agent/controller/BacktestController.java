@@ -341,47 +341,47 @@ public class BacktestController {
 
         strategies.put("scalping", Map.of(
             "name", "Scalping",
-            "description", "Quick trades on small price movements (0.3-0.5%)",
+            "description", "EMA(9)/EMA(21) cross on 1-min bars in the direction of VWAP; 0.3% target, 0.2% stop, 30-min time stop",
             "riskLevel", "HIGH",
             "tradesPerDay", "3-5",
             "bestFor", "High volatility, range-bound markets",
-            "parameters", java.util.Arrays.asList("takeProfit", "stopLoss")
+            "parameters", java.util.Arrays.asList("takeProfit", "stopLoss", "maxHoldMinutes")
         ));
 
         strategies.put("momentum", Map.of(
             "name", "Momentum",
-            "description", "Ride intraday trends with larger position sizes",
+            "description", "15-min return beyond momentumThreshold %, confirmed by price vs VWAP",
             "riskLevel", "MEDIUM-HIGH",
             "tradesPerDay", "1-2",
             "bestFor", "Trending markets, strong directional moves",
-            "parameters", java.util.Arrays.asList("momentumThreshold", "trailingStop")
+            "parameters", java.util.Arrays.asList("momentumThreshold", "momentumLookback", "takeProfit", "stopLoss")
         ));
 
         strategies.put("mean_reversion", Map.of(
             "name", "Mean Reversion",
-            "description", "Trade bounces from oversold/overbought levels",
+            "description", "RSI(14) extreme while price is stretched away from VWAP",
             "riskLevel", "MEDIUM",
             "tradesPerDay", "1-3",
             "bestFor", "Range-bound markets, extreme RSI readings",
-            "parameters", java.util.Arrays.asList("rsiOversold", "rsiOverbought", "targetReversion")
+            "parameters", java.util.Arrays.asList("rsiOversold", "rsiOverbought", "vwapStretch")
         ));
 
         strategies.put("breakout", Map.of(
             "name", "Breakout",
-            "description", "Trade price breakouts with volume confirmation",
+            "description", "Close beyond the 9:30-9:45 opening range on above-average volume, once per side per day",
             "riskLevel", "MEDIUM-HIGH",
             "tradesPerDay", "0-2",
             "bestFor", "High volume days, earnings/news catalysts",
-            "parameters", java.util.Arrays.asList("breakoutThreshold", "volumeMultiplier")
+            "parameters", java.util.Arrays.asList("volumeMultiplier", "takeProfit", "stopLoss")
         ));
 
         strategies.put("combined", Map.of(
             "name", "Combined/Adaptive",
-            "description", "Dynamically switches between strategies based on market conditions",
+            "description", "Momentum signal confirmed by an opening-range breakout or EMA cross",
             "riskLevel", "MEDIUM",
             "tradesPerDay", "2-4",
-            "bestFor", "All market conditions (recommended for beginners)",
-            "parameters", java.util.Arrays.asList("all")
+            "bestFor", "Filtering out weak momentum signals",
+            "parameters", java.util.Arrays.asList("momentumThreshold", "takeProfit", "stopLoss")
         ));
 
         return ResponseEntity.ok(strategies);

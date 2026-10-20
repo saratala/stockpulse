@@ -709,7 +709,7 @@ export interface BacktestTrade {
   pnl: number;
   returnPct: string;
   exitReason: string;
-  confidence: number;
+  confidence?: number;
 }
 
 export interface DayTradingBacktestResult {
