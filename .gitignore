@@ -53,3 +53,6 @@ pgdata/
 # Gradle
 .gradle/
 **/.gradle/
+
+# Claude Code agent worktrees
+.claude/worktrees/
