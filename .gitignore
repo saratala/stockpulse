@@ -49,3 +49,7 @@ pgdata/
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Gradle
+.gradle/
+**/.gradle/
