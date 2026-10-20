@@ -31,7 +31,7 @@ import java.util.stream.Collectors;
  *   cost charged) and reported as openPosition, not as a closed trade
  *
  * Strategies:
- * 1. trend         - close > SMA(200) and SMA(50) > SMA(200); exit on close < SMA(50)
+ * 1. trend         - close > SMA(50) and SMA(50) > SMA(200); exit on close < SMA(50)
  * 2. donchian      - close > highest high of prior 20 days; exit on close < lowest low of
  *                    prior 10 days; stop at entry - 2 x ATR(14) (Wilder)
  * 3. rsi2_pullback - close > SMA(200) and RSI(2) < 10; exit on close > SMA(5) or after 10 days
@@ -233,7 +233,7 @@ public class SwingBacktestService {
                 pendingExit = exitSignal(strategy, i, closes, smaFast, priorLow, exitSma, pos, maxHoldDays);
             } else {
                 boolean enter = switch (strategy) {
-                    case "trend" -> closes[i] > smaSlow[i] && smaFast[i] > smaSlow[i];
+                    case "trend" -> closes[i] > smaFast[i] && smaFast[i] > smaSlow[i];   // above SMA50 so an SMA50 exit doesn't re-enter next day
                     case "donchian" -> closes[i] > priorHigh[i];
                     case "rsi2_pullback" -> closes[i] > trendSma[i] && rsi[i] < params.get("rsiEntry");
                     default -> false;   // buy_hold enters once, before the loop
