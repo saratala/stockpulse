@@ -48,6 +48,7 @@ A comprehensive real-time stock market analysis platform built with Java Spring 
 - **Predictions**: `/api/v1/predictions` - Technical analysis-based predictions
 - **Sentiment**: `/api/v1/sentiment-analysis` - LLM sentiment analysis
 - **Data Updates**: `/api/v1/data` - Manual data refresh triggers
+- **Trading**: `/api/v1/trading` - Alpaca paper-trading auto-trader (off by default, see `docs/PAPER_TRADING.md`)
 
 ## 🚀 Quick Start
 
@@ -59,7 +60,7 @@ A comprehensive real-time stock market analysis platform built with Java Spring 
 
 1. **Clone the repository**:
 ```bash
-git clone https://github.com/yourusername/stockpulse.git
+git clone https://github.com/saratala/stockpulse.git
 cd stockpulse
 ```
 

@@ -179,6 +179,32 @@ app:
       retry-attempts: 2
       fallback-enabled: true
 
+  # Auto-trader (Alpaca). Disabled by default; paper endpoint by default.
+  # See docs/PAPER_TRADING.md before flipping any of these.
+  trading:
+    enabled: ${TRADING_ENABLED:false}
+    cron: "0 */5 * * * *"
+    alpaca:
+      base-url: ${ALPACA_BASE_URL:https://paper-api.alpaca.markets}
+      key-id: ${ALPACA_KEY_ID:}
+      secret-key: ${ALPACA_SECRET_KEY:}
+      timeout-ms: 10000
+    risk:
+      max-position-notional: ${TRADING_MAX_POSITION_NOTIONAL:1000}
+      max-position-pct-of-equity: 0.05
+      max-open-positions: ${TRADING_MAX_OPEN_POSITIONS:5}
+      max-daily-loss-pct: ${TRADING_MAX_DAILY_LOSS_PCT:0.02}
+      take-profit-pct: 0.03
+      stop-loss-pct: 0.015
+      require-market-open: true
+      no-new-entries-minutes-before-close: 30
+      allow-shorts: false
+    signals:
+      min-confidence: ${TRADING_MIN_CONFIDENCE:75}
+      min-screening-score: 70
+      lookback-minutes: 35
+      exit-confidence: 70
+
 ---
 spring:
   config:
