@@ -4,6 +4,7 @@ import com.stockpulse.agent.dto.StrategyComparison;
 import com.stockpulse.agent.service.ComprehensiveBacktestService;
 import com.stockpulse.agent.service.RealTimeDataService;
 import com.stockpulse.agent.service.CsvImportService;
+import com.stockpulse.agent.service.DailyPriceBackfillService;
 import com.stockpulse.agent.service.SP500HistoricalDataService;
 import com.stockpulse.agent.service.YahooFinanceService;
 import lombok.RequiredArgsConstructor;
@@ -27,7 +28,19 @@ public class DataController {
     private final ComprehensiveBacktestService comprehensiveBacktestService;
     private final CsvImportService csvImportService;
     private final SP500HistoricalDataService sp500HistoricalDataService;
+    private final DailyPriceBackfillService dailyPriceBackfillService;
     
+    /**
+     * Load Yahoo daily bars for the current year and the previous {@code years} years,
+     * overwriting existing bars for the same day (Yahoo's bar is authoritative).
+     */
+    @PostMapping("/daily/backfill/{ticker}")
+    public ResponseEntity<DailyPriceBackfillService.BackfillResult> backfillDaily(
+            @PathVariable String ticker,
+            @RequestParam(defaultValue = "1") int years) {
+        return ResponseEntity.ok(dailyPriceBackfillService.backfill(ticker, Math.max(0, Math.min(years, 20))));
+    }
+
     @PostMapping("/update/realtime")
     public ResponseEntity<Map<String, Object>> updateRealTimeData() {
         log.info("Manual real-time data update requested");

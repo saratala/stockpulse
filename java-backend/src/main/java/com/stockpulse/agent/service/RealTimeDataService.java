@@ -10,7 +10,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -130,21 +135,76 @@ public class RealTimeDataService {
         stockRepository.save(stock);
     }
     
+    static final ZoneId MARKET_ZONE = ZoneId.of("America/New_York");
+    static final LocalTime MARKET_OPEN = LocalTime.of(9, 30);
+
     private void updateStockPrice(String ticker, YahooFinanceService.StockQuote quote) {
-        LocalDateTime now = LocalDateTime.now();
-        
-        StockPrice stockPrice = StockPrice.builder()
-            .ticker(ticker)
-            .date(now)
-            .open(quote.getPrice()) // For real-time, use current price as open
-            .high(quote.getPrice())
-            .low(quote.getPrice())
-            .close(quote.getPrice())
-            .volume(quote.getVolume())
-            .adjustedClose(quote.getPrice())
-            .build();
-        
-        stockPriceRepository.save(stockPrice);
+        updateStockPrice(ticker, quote, ZonedDateTime.now(MARKET_ZONE));
+    }
+
+    /**
+     * Upserts the current trading day's single daily bar from a real-time quote.
+     * stock_prices holds one row per ticker per trading day, keyed (ticker, date) with the date
+     * at 09:30 New York local time as a LocalDateTime - the same key the historical loader writes
+     * (YahooFinanceService converts Yahoo's daily timestamps with America/New_York; the JVM runs
+     * in UTC, so these rows are stored as 09:30+00). This used to insert a new row keyed by
+     * LocalDateTime.now() on every 5-minute run, around the clock.
+     */
+    void updateStockPrice(String ticker, YahooFinanceService.StockQuote quote, ZonedDateTime now) {
+        BigDecimal price = quote.getPrice();
+        if (price == null || price.signum() <= 0) {
+            return;
+        }
+
+        ZonedDateTime marketNow = now.withZoneSameInstant(MARKET_ZONE);
+        LocalDate tradingDay = marketNow.toLocalDate();
+        DayOfWeek dayOfWeek = tradingDay.getDayOfWeek();
+        if (dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY
+                || marketNow.toLocalTime().isBefore(MARKET_OPEN)) {
+            // No session today (yet): the quote is still the previous session's price.
+            log.debug("Market not open for {} on {}, skipping daily bar update", ticker, tradingDay);
+            return;
+        }
+
+        LocalDateTime barDate = tradingDay.atTime(MARKET_OPEN);
+        Long volume = quote.getVolume();
+        Optional<StockPrice> existing = stockPriceRepository.findById(new StockPriceId(ticker, barDate));
+
+        StockPrice bar;
+        if (existing.isPresent()) {
+            bar = existing.get();
+            BigDecimal high = bar.getHigh().max(price);
+            BigDecimal low = bar.getLow().min(price);
+            if (price.compareTo(bar.getClose()) == 0 && high.compareTo(bar.getHigh()) == 0
+                    && low.compareTo(bar.getLow()) == 0 && Objects.equals(volume, bar.getVolume())) {
+                return; // nothing changed (e.g. after the close)
+            }
+            bar.setHigh(high);
+            bar.setLow(low);
+            bar.setClose(price);
+            bar.setAdjustedClose(price);
+            bar.setVolume(volume);
+        } else {
+            // Weekday holiday: Yahoo keeps returning the last session's price and volume.
+            Optional<StockPrice> latest = stockPriceRepository.findLatestByTicker(ticker);
+            if (latest.isPresent() && price.compareTo(latest.get().getClose()) == 0
+                    && Objects.equals(volume, latest.get().getVolume())) {
+                log.debug("Quote for {} unchanged since last bar, skipping (market closed?)", ticker);
+                return;
+            }
+            bar = StockPrice.builder()
+                .ticker(ticker)
+                .date(barDate)
+                .open(price) // first quote seen in today's session
+                .high(price)
+                .low(price)
+                .close(price)
+                .volume(volume)
+                .adjustedClose(price)
+                .build();
+        }
+
+        stockPriceRepository.save(bar);
     }
     
     private void updateScreeningResult(String ticker) {
