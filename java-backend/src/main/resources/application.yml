@@ -172,7 +172,7 @@ app:
       bucket: flatfiles
     # WebSocket Configuration for real-time streaming
     websocket:
-      enabled: true
+      enabled: false  # Current Massive plan has no websocket access (auth_failed loop)
       url: wss://delayed.massive.com/stocks  # Use wss://socket.massive.com/stocks for real-time (requires paid plan)
       reconnect-delay-ms: 5000
       heartbeat-interval-ms: 30000
