@@ -38,7 +38,7 @@ public class IntradayDataScheduler {
      * Fetch intraday data during market hours (9:30 AM - 4:00 PM ET, Mon-Fri).
      * Runs every 30 minutes to stay within free tier API limits (800/day).
      */
-    @Scheduled(cron = "${app.twelvedata.scheduler.cron:0 0,30 9-16 * * MON-FRI}")
+    @Scheduled(cron = "${app.twelvedata.scheduler.cron:0 0,30 9-16 * * MON-FRI}", zone = "America/New_York")
     public void fetchIntradayData() {
         if (!enabled || !schedulerEnabled) {
             log.debug("Intraday data scheduler is disabled");

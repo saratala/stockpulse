@@ -60,7 +60,7 @@ public class HistoricalDataFetcherScheduler {
      * Run during off-market hours to fetch historical data
      * Cron: Every 15 minutes between 5 PM and 9 AM ET (off-market hours)
      */
-    @Scheduled(cron = "${app.massivedata.historical-fetch.cron:0 */15 17-23,0-8 * * *}")
+    @Scheduled(cron = "${app.massivedata.historical-fetch.cron:0 */15 17-23,0-8 * * *}", zone = "America/New_York")
     public void fetchHistoricalData() {
         if (!enabled || !historicalFetchEnabled) {
             log.debug("Historical data fetch is disabled");

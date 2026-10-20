@@ -472,7 +472,7 @@ SELECT create_hypertable('stock_prices_intraday', 'timestamp',
 
 -- Create indexes for intraday queries
 CREATE INDEX IF NOT EXISTS idx_intraday_ticker_time ON stock_prices_intraday (ticker, timestamp DESC);
-CREATE INDEX IF NOT EXISTS idx_intraday_date ON stock_prices_intraday (((timestamp AT TIME ZONE 'UTC')::date), ticker);
+CREATE INDEX IF NOT EXISTS idx_intraday_date ON stock_prices_intraday (((timestamp AT TIME ZONE 'America/New_York')::date), ticker);
 
 -- Enable compression on intraday hypertable
 ALTER TABLE stock_prices_intraday SET (

@@ -75,17 +75,17 @@ public interface IntradayPriceRepository extends JpaRepository<IntradayPrice, In
      */
     @Query(value = """
         SELECT
-            DATE_TRUNC('hour', timestamp) as hour,
-            (SELECT open FROM stock_prices_intraday WHERE ticker = :ticker AND DATE_TRUNC('hour', timestamp) = DATE_TRUNC('hour', ip.timestamp) ORDER BY timestamp ASC LIMIT 1) as open,
-            MAX(high) as high,
-            MIN(low) as low,
-            (SELECT close FROM stock_prices_intraday WHERE ticker = :ticker AND DATE_TRUNC('hour', timestamp) = DATE_TRUNC('hour', ip.timestamp) ORDER BY timestamp DESC LIMIT 1) as close,
-            SUM(volume) as volume
+            DATE_TRUNC('hour', ip.timestamp AT TIME ZONE 'America/New_York') as hour,
+            (ARRAY_AGG(ip.open ORDER BY ip.timestamp ASC))[1] as open,
+            MAX(ip.high) as high,
+            MIN(ip.low) as low,
+            (ARRAY_AGG(ip.close ORDER BY ip.timestamp DESC))[1] as close,
+            SUM(ip.volume) as volume
         FROM stock_prices_intraday ip
         WHERE ip.ticker = :ticker
-        AND ip.timestamp >= :startTime
-        AND ip.timestamp <= :endTime
-        GROUP BY DATE_TRUNC('hour', ip.timestamp)
+        AND ip.timestamp >= (CAST(:startTime AS TIMESTAMP) AT TIME ZONE 'America/New_York')
+        AND ip.timestamp <= (CAST(:endTime AS TIMESTAMP) AT TIME ZONE 'America/New_York')
+        GROUP BY 1
         ORDER BY hour ASC
         """, nativeQuery = true)
     List<Object[]> aggregateToHourly(

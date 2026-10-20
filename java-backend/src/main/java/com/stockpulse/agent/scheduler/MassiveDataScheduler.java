@@ -34,6 +34,9 @@ public class MassiveDataScheduler {
     @Value("${app.massivedata.scheduler.max-tickers-per-run:20}")
     private int maxTickersPerRun;
 
+    @Value("${app.massivedata.rate-limit.delay-ms:12000}")
+    private long requestDelayMs;
+
     @Value("${app.massivedata.timezone:America/New_York}")
     private String timezone;
 
@@ -43,7 +46,7 @@ public class MassiveDataScheduler {
      * Fetch intraday data during market hours (9:30 AM - 4:00 PM ET, Mon-Fri).
      * Runs every 15 minutes.
      */
-    @Scheduled(cron = "${app.massivedata.scheduler.cron:0 */15 9-16 * * MON-FRI}")
+    @Scheduled(cron = "${app.massivedata.scheduler.cron:0 */15 9-16 * * MON-FRI}", zone = "America/New_York")
     public void fetchIntradayData() {
         if (!enabled || !schedulerEnabled) {
             log.debug("Massive Data scheduler is disabled");
@@ -90,9 +93,9 @@ public class MassiveDataScheduler {
                     log.warn("Failed to fetch data for {}: {}", ticker, result.getError());
                 }
 
-                // Small delay between requests (Massive Data has higher rate limits)
+                // Stay under the API's per-minute request limit
                 try {
-                    Thread.sleep(250);
+                    Thread.sleep(requestDelayMs);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     break;
