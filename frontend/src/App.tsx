@@ -3,7 +3,6 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Navbar from './components/Navbar';
 import Dashboard from './pages/Dashboard';
 import StockDetails from './pages/StockDetails';
-import PredictionsHistory from './pages/PredictionsHistory';
 import Screener from './pages/Screener';
 import StockAnalysis from './pages/StockAnalysis';
 import BacktestingDashboard from './pages/BacktestingDashboard';
@@ -23,7 +22,7 @@ function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/stock/:ticker" element={<StockDetails />} />
             <Route path="/predictions" element={<Navigate to="/screener" replace />} />
-            <Route path="/predictions-history" element={<PredictionsHistory />} />
+            <Route path="/predictions-history" element={<Navigate to="/screener" replace />} />
             <Route path="/screener" element={<Screener />} />
             <Route path="/analysis/:ticker" element={<StockAnalysis />} />
             <Route path="/backtesting" element={<BacktestingDashboard />} />

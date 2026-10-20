@@ -35,13 +35,6 @@ const Navbar = () => {
             Screener
           </Link>
           <Link
-            to="/predictions-history"
-            className="transition-colors duration-200 hover:brightness-75"
-            style={{ color: 'var(--text-secondary)' }}
-          >
-            History
-          </Link>
-          <Link
             to="/backtesting"
             className="transition-colors duration-200 hover:brightness-75"
             style={{ color: 'var(--text-secondary)' }}

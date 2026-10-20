@@ -10,7 +10,9 @@ import {
   fetchAllTickers,
   fetchSentimentSummary,
   fetchLatestPredictions,
-  fetchHealthStatus
+  fetchHealthStatus,
+  fetchHighImpactNews,
+  MarketNews
 } from '../services/api';
 
 const Dashboard = () => {
@@ -18,6 +20,7 @@ const Dashboard = () => {
   const [sentimentSummary, setSentimentSummary] = useState<any>(null);
   const [predictions, setPredictions] = useState<any[]>([]);
   const [healthStatus, setHealthStatus] = useState<any>(null);
+  const [marketNews, setMarketNews] = useState<MarketNews[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Real-time price streaming
@@ -31,11 +34,12 @@ const Dashboard = () => {
         setIsLoading(true);
         
         // Load data in parallel
-        const [tickersRes, sentimentRes, predictionsRes, healthRes] = await Promise.allSettled([
+        const [tickersRes, sentimentRes, predictionsRes, healthRes, marketNewsRes] = await Promise.allSettled([
           fetchAllTickers(),
           fetchSentimentSummary(24),
           fetchLatestPredictions(),
-          fetchHealthStatus()
+          fetchHealthStatus(),
+          fetchHighImpactNews(48)
         ]);
 
         if (tickersRes.status === 'fulfilled') {
@@ -49,6 +53,9 @@ const Dashboard = () => {
         }
         if (healthRes.status === 'fulfilled') {
           setHealthStatus(healthRes.value);
+        }
+        if (marketNewsRes.status === 'fulfilled') {
+          setMarketNews(marketNewsRes.value.news || []);
         }
       } catch (error) {
         console.error('Error loading dashboard data:', error);
@@ -206,6 +213,93 @@ const Dashboard = () => {
               </div>
             </GlassContainer>
           </div>
+
+          {/* Market Events - High Impact News */}
+          <GlassContainer className="p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-semibold text-white flex items-center gap-2">
+                <span className="text-2xl">📢</span>
+                Market Events
+              </h3>
+              {marketNews.length > 0 && (
+                <span className="px-2 py-1 bg-red-500/20 text-red-400 text-xs font-medium rounded-full">
+                  {marketNews.length} High Impact
+                </span>
+              )}
+            </div>
+            {marketNews.length > 0 ? (
+              <div className="space-y-3 max-h-80 overflow-y-auto">
+                {marketNews.slice(0, 6).map((news) => (
+                  <a
+                    key={news.id}
+                    href={news.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block bg-gray-800/50 rounded-lg p-4 hover:bg-gray-700/50 transition-colors"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm ${
+                        news.category === 'FED' ? 'bg-blue-500/20 text-blue-400' :
+                        news.category === 'EMPLOYMENT' ? 'bg-green-500/20 text-green-400' :
+                        news.category === 'CPI' ? 'bg-red-500/20 text-red-400' :
+                        news.category === 'GDP' ? 'bg-purple-500/20 text-purple-400' :
+                        news.category === 'GEOPOLITICAL' ? 'bg-orange-500/20 text-orange-400' :
+                        'bg-gray-500/20 text-gray-400'
+                      }`}>
+                        {news.category === 'FED' ? '🏦' :
+                         news.category === 'EMPLOYMENT' ? '👥' :
+                         news.category === 'CPI' ? '📊' :
+                         news.category === 'GDP' ? '📈' :
+                         news.category === 'GEOPOLITICAL' ? '🌍' :
+                         news.category === 'TREASURY' ? '💵' :
+                         '📰'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-white text-sm font-medium line-clamp-2">
+                          {news.title}
+                        </h4>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            news.impactLevel === 'HIGH' ? 'bg-red-500/20 text-red-400' :
+                            news.impactLevel === 'MEDIUM' ? 'bg-yellow-500/20 text-yellow-400' :
+                            'bg-gray-500/20 text-gray-400'
+                          }`}>
+                            {news.impactLevel}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {news.category.replace('_', ' ')}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {new Date(news.publishedAt).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </span>
+                        </div>
+                        {news.affectedSectors && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {news.affectedSectors.split(',').map((sector) => (
+                              <span key={sector} className="text-xs px-1.5 py-0.5 bg-gray-700/50 text-gray-400 rounded">
+                                {sector}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-400">
+                <span className="text-4xl mb-3 block">📭</span>
+                <p>No high-impact market events in the last 48 hours</p>
+                <p className="text-sm mt-1">Events like Fed decisions, jobs reports, and CPI data will appear here</p>
+              </div>
+            )}
+          </GlassContainer>
 
           {/* Featured Tickers with Real-Time Prices */}
           {tickers.length > 0 && (
