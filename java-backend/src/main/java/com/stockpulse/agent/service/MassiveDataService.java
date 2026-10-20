@@ -9,6 +9,7 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +36,7 @@ public class MassiveDataService {
 
     private final IntradayPriceRepository intradayPriceRepository;
     private final ObjectMapper objectMapper;
+    private final JdbcTemplate jdbcTemplate;
 
     @Value("${app.massivedata.api-key:}")
     private String apiKey;
@@ -160,9 +162,9 @@ public class MassiveDataService {
     }
 
     /**
-     * Fetch historical intraday data for a date range
+     * Fetch historical intraday data for a date range. Not transactional: each
+     * window commits on its own so a late failure keeps earlier windows.
      */
-    @Transactional
     public FetchResult fetchHistoricalIntraday(String ticker, LocalDate startDate, LocalDate endDate) {
         if (!enabled || apiKey == null || apiKey.isEmpty()) {
             return FetchResult.builder()
@@ -172,86 +174,96 @@ public class MassiveDataService {
                     .build();
         }
 
-        try {
-            String startStr = startDate.format(DateTimeFormatter.ISO_LOCAL_DATE);
-            String endStr = endDate.format(DateTimeFormatter.ISO_LOCAL_DATE);
+        // One request returns at most 50,000 bars (~50 trading days incl. extended hours),
+        // so walk the range in 30-day windows to avoid silently truncating it.
+        String symbol = ticker.toUpperCase();
+        int saved = 0;
+        int duplicates = 0;
+        List<String> errors = new ArrayList<>();
 
-            String url = String.format("%s/v2/aggs/ticker/%s/range/1/minute/%s/%s?adjusted=true&sort=asc&limit=50000&apiKey=%s",
-                    baseUrl, ticker.toUpperCase(), startStr, endStr, apiKey);
-
-            log.info("Fetching historical intraday data for {} from {} to {}", ticker, startStr, endStr);
-
-            String response = restTemplate.getForObject(url, String.class);
-            MassiveDataResponse data = objectMapper.readValue(response, MassiveDataResponse.class);
-
-            if (data.getStatus() != null && data.getStatus().equals("ERROR")) {
-                return FetchResult.builder()
-                        .ticker(ticker)
-                        .success(false)
-                        .error(data.getError())
-                        .build();
-            }
-
-            if (data.getResults() == null || data.getResults().isEmpty()) {
-                return FetchResult.builder()
-                        .ticker(ticker)
-                        .success(false)
-                        .error("No data returned for date range")
-                        .build();
-            }
-
-            List<IntradayPrice> prices = new ArrayList<>();
-            int duplicates = 0;
-            ZoneId zoneId = ZoneId.of(timezone);
-
-            for (MassiveDataBar bar : data.getResults()) {
+        for (LocalDate from = startDate; !from.isAfter(endDate); from = from.plusDays(30)) {
+            LocalDate to = from.plusDays(29).isAfter(endDate) ? endDate : from.plusDays(29);
+            if (from.isAfter(startDate)) {
                 try {
-                    LocalDateTime timestamp = LocalDateTime.ofInstant(
-                            Instant.ofEpochMilli(bar.getT()), zoneId);
-
-                    if (intradayPriceRepository.existsByTickerAndTimestamp(ticker.toUpperCase(), timestamp)) {
-                        duplicates++;
-                        continue;
-                    }
-
-                    IntradayPrice price = IntradayPrice.builder()
-                            .ticker(ticker.toUpperCase())
-                            .timestamp(timestamp)
-                            .open(BigDecimal.valueOf(bar.getO()))
-                            .high(BigDecimal.valueOf(bar.getH()))
-                            .low(BigDecimal.valueOf(bar.getL()))
-                            .close(BigDecimal.valueOf(bar.getC()))
-                            .volume(bar.getV())
-                            .build();
-
-                    prices.add(price);
-                } catch (Exception e) {
-                    log.warn("Error parsing historical data point: {}", e.getMessage());
+                    Thread.sleep(rateLimitDelayMs);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    errors.add("interrupted");
+                    break;
                 }
             }
 
-            if (!prices.isEmpty()) {
-                intradayPriceRepository.saveAll(prices);
+            try {
+                String url = String.format("%s/v2/aggs/ticker/%s/range/1/minute/%s/%s?adjusted=true&sort=asc&limit=50000&apiKey=%s",
+                        baseUrl, symbol, from, to, apiKey);
+                log.info("Fetching historical intraday data for {} from {} to {}", symbol, from, to);
+
+                MassiveDataResponse data = objectMapper.readValue(
+                        restTemplate.getForObject(url, String.class), MassiveDataResponse.class);
+
+                if ("ERROR".equals(data.getStatus())) {
+                    errors.add(from + ".." + to + ": " + data.getError());
+                    continue;
+                }
+                if (data.getResults() == null || data.getResults().isEmpty()) {
+                    continue;
+                }
+
+                int[] written = insertBars(symbol, data.getResults());
+                saved += written[0];
+                duplicates += written[1];
+            } catch (Exception e) {
+                // A plan's history limit comes back as HTTP 403; keep going with later windows
+                log.warn("Historical fetch for {} {}..{} failed: {}", symbol, from, to, e.getMessage());
+                errors.add(from + ".." + to + ": " + e.getMessage());
             }
-
-            log.info("Saved {} historical intraday records for {} ({} duplicates skipped)",
-                    prices.size(), ticker, duplicates);
-
-            return FetchResult.builder()
-                    .ticker(ticker)
-                    .success(true)
-                    .recordsSaved(prices.size())
-                    .duplicatesSkipped(duplicates)
-                    .build();
-
-        } catch (Exception e) {
-            log.error("Error fetching historical intraday data for {}: {}", ticker, e.getMessage());
-            return FetchResult.builder()
-                    .ticker(ticker)
-                    .success(false)
-                    .error(e.getMessage())
-                    .build();
         }
+
+        log.info("Saved {} historical intraday records for {} ({} duplicates skipped, {} windows failed)",
+                saved, symbol, duplicates, errors.size());
+
+        return FetchResult.builder()
+                .ticker(symbol)
+                .success(saved + duplicates > 0)
+                .recordsSaved(saved)
+                .duplicatesSkipped(duplicates)
+                .error(errors.isEmpty() ? null : String.join("; ", errors))
+                .build();
+    }
+
+    /**
+     * Batch insert bars, letting the primary key reject duplicates. Timestamps are
+     * epoch millis converted in SQL, so no JVM/Eastern time zone handling is involved.
+     *
+     * @return {saved, duplicatesOrInvalid}
+     */
+    private int[] insertBars(String ticker, List<MassiveDataBar> bars) {
+        List<MassiveDataBar> valid = bars.stream()
+                .filter(b -> b.getH() >= b.getL() && b.getH() >= b.getO() && b.getH() >= b.getC()
+                        && b.getL() <= b.getO() && b.getL() <= b.getC() && b.getV() >= 0)
+                .toList();
+
+        int[][] counts = jdbcTemplate.batchUpdate("""
+                INSERT INTO stock_prices_intraday (ticker, timestamp, open, high, low, close, volume)
+                VALUES (?, to_timestamp(? / 1000.0), ?, ?, ?, ?, ?)
+                ON CONFLICT (ticker, timestamp) DO NOTHING
+                """, valid, 5000, (ps, b) -> {
+                    ps.setString(1, ticker);
+                    ps.setLong(2, b.getT());
+                    ps.setDouble(3, b.getO());
+                    ps.setDouble(4, b.getH());
+                    ps.setDouble(5, b.getL());
+                    ps.setDouble(6, b.getC());
+                    ps.setLong(7, b.getV());
+                });
+
+        int saved = 0;
+        for (int[] batch : counts) {
+            for (int c : batch) {
+                if (c > 0) saved += c;
+            }
+        }
+        return new int[]{saved, bars.size() - saved};
     }
 
     /**
