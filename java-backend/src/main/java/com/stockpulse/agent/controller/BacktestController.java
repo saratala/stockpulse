@@ -7,6 +7,7 @@ import com.stockpulse.agent.service.BacktestingService;
 import com.stockpulse.agent.service.ComprehensiveBacktestService;
 import com.stockpulse.agent.service.DayTradingBacktestService;
 import com.stockpulse.agent.service.MLBacktestService;
+import com.stockpulse.agent.service.SwingBacktestService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -26,6 +27,7 @@ public class BacktestController {
     private final MLBacktestService mlBacktestService;
     private final DayTradingBacktestService dayTradingBacktestService;
     private final AdvancedDayTradingService advancedDayTradingService;
+    private final SwingBacktestService swingBacktestService;
     
     @GetMapping("/health")
     public ResponseEntity<String> health() {
@@ -515,5 +517,108 @@ public class BacktestController {
         config.put("maxDailyLoss", maxLoss);
         config.put("enableScalping", scalping);
         return config;
+    }
+
+    // ============ Swing Trading (multi-day holds on daily bars) ============
+
+    /**
+     * Run a swing backtest on daily bars.
+     * Available strategies: trend, donchian, rsi2_pullback, buy_hold
+     */
+    @PostMapping("/swing")
+    public ResponseEntity<Map<String, Object>> runSwingBacktest(
+            @RequestParam String ticker,
+            @RequestParam(defaultValue = "10000") BigDecimal initialCapital,
+            @RequestParam(defaultValue = "trend") String strategy,
+            @RequestParam(required = false) Double stopLossPct,
+            @RequestParam(required = false) Double stopAtrMultiple,
+            @RequestParam(required = false) Double maxHoldDays,
+            @RequestParam(required = false) Double positionSize,
+            @RequestParam(required = false) Double warmupDays,
+            @RequestParam(required = false) Double rsiEntry) {
+
+        log.info("Running swing backtest for ticker: {}, strategy: {}", ticker, strategy);
+
+        try {
+            Map<String, Double> params = new java.util.HashMap<>();
+            if (stopLossPct != null) params.put("stopLossPct", stopLossPct);
+            if (stopAtrMultiple != null) params.put("stopAtrMultiple", stopAtrMultiple);
+            if (maxHoldDays != null) params.put("maxHoldDays", maxHoldDays);
+            if (positionSize != null) params.put("positionSize", positionSize);
+            if (warmupDays != null) params.put("warmupDays", warmupDays);
+            if (rsiEntry != null) params.put("rsiEntry", rsiEntry);
+
+            return ResponseEntity.ok(swingBacktestService.runSwingBacktest(
+                ticker.toUpperCase(), initialCapital, strategy, params));
+        } catch (Exception e) {
+            log.error("Error running swing backtest", e);
+            Map<String, Object> error = new java.util.HashMap<>();
+            error.put("ticker", ticker);
+            error.put("strategy", strategy);
+            error.put("error", e.getMessage());
+            return ResponseEntity.ok(error);
+        }
+    }
+
+    /**
+     * Compare all swing strategies (including the buy_hold benchmark) over the same test window.
+     */
+    @PostMapping("/swing/compare")
+    public ResponseEntity<Map<String, Object>> compareSwingStrategies(
+            @RequestParam String ticker,
+            @RequestParam(defaultValue = "10000") BigDecimal initialCapital) {
+
+        log.info("Comparing swing strategies for ticker: {}", ticker);
+
+        Map<String, Object> results = new java.util.LinkedHashMap<>();
+        java.util.List<Map<String, Object>> summary = new java.util.ArrayList<>();
+
+        for (String strategy : SwingBacktestService.STRATEGIES) {
+            try {
+                Map<String, Object> result = swingBacktestService.runSwingBacktest(
+                    ticker.toUpperCase(), initialCapital, strategy, new java.util.HashMap<>());
+                results.put(strategy, result);
+
+                Map<String, Object> stratSummary = new java.util.LinkedHashMap<>();
+                stratSummary.put("strategy", strategy);
+                if (result.containsKey("performance")) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> perf = (Map<String, Object>) result.get("performance");
+                    for (String key : java.util.List.of("totalReturn", "buyHoldReturn", "excessReturn",
+                            "maxDrawdown", "sharpeRatio", "totalTrades", "winRate", "profitFactor",
+                            "exposurePct", "avgHoldingDays")) {
+                        stratSummary.put(key, perf.get(key));
+                    }
+                }
+                if (result.containsKey("recommendation")) {
+                    stratSummary.put("recommendation", result.get("recommendation"));
+                }
+                if (result.containsKey("error")) {
+                    stratSummary.put("error", result.get("error"));
+                }
+                summary.add(stratSummary);
+            } catch (Exception e) {
+                log.error("Error running swing {} strategy: {}", strategy, e.getMessage());
+            }
+        }
+
+        summary.sort((a, b) -> Double.compare(percent(b.get("totalReturn")), percent(a.get("totalReturn"))));
+
+        results.put("_summary", summary);
+        results.put("_bestStrategy", summary.isEmpty() || !summary.get(0).containsKey("totalReturn")
+            ? null : summary.get(0).get("strategy"));
+
+        return ResponseEntity.ok(results);
+    }
+
+    private static double percent(Object value) {
+        if (value instanceof String s) {
+            try {
+                return Double.parseDouble(s.replace("%", ""));
+            } catch (NumberFormatException ignored) {
+                // fall through
+            }
+        }
+        return Double.NEGATIVE_INFINITY;
     }
 }
