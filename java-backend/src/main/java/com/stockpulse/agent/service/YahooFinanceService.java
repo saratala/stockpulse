@@ -506,87 +506,120 @@ public class YahooFinanceService {
     }
     
     /**
-     * Fetch historical data for a full year (2024)
+     * Fetch historical data for a full year
      */
     public Optional<HistoricalData> fetchYearlyData(String ticker, int year) {
         log.info("Fetching yearly data for ticker: {} for year: {}", ticker, year);
-        
+
         try {
             // Calculate period1 (start of year) and period2 (end of year)
             long period1 = Instant.parse(year + "-01-01T00:00:00Z").getEpochSecond();
             long period2 = Instant.parse(year + "-12-31T23:59:59Z").getEpochSecond();
-            
-            String url = yahooFinanceBaseUrl + "/v8/finance/chart/" + ticker + 
+
+            // Don't fetch future data
+            long now = Instant.now().getEpochSecond();
+            if (period2 > now) {
+                period2 = now;
+            }
+
+            String url = yahooFinanceBaseUrl + "/v8/finance/chart/" + ticker +
                         "?interval=1d&period1=" + period1 + "&period2=" + period2;
-            
+
             log.debug("Fetching from URL: {}", url);
-            
+
             Mono<String> response = webClient.get()
                 .uri(url)
                 .retrieve()
                 .bodyToMono(String.class)
                 .timeout(Duration.ofMillis(timeout * 3)) // Longer timeout for historical data
                 .doOnError(error -> log.error("Error fetching yearly data for {}: {}", ticker, error.getMessage()));
-            
+
             String jsonResponse = response.block();
             if (jsonResponse == null) {
                 log.warn("No response received for yearly data: {}", ticker);
                 return Optional.empty();
             }
-            
+
+            // Check for rate limiting
+            if (jsonResponse.contains("Too Many Requests")) {
+                log.warn("Yahoo Finance rate limiting detected for {}", ticker);
+                return Optional.empty();
+            }
+
             JsonNode jsonNode = objectMapper.readTree(jsonResponse);
-            JsonNode chart = jsonNode.path("chart");
-            
-            if (chart.isArray() && chart.size() > 0) {
-                JsonNode result = chart.get(0).path("result");
-                if (result.isArray() && result.size() > 0) {
-                    JsonNode data = result.get(0);
-                    JsonNode timestamps = data.path("timestamp");
-                    JsonNode indicators = data.path("indicators").path("quote");
-                    
-                    if (indicators.isArray() && indicators.size() > 0) {
-                        JsonNode quote = indicators.get(0);
-                        JsonNode opens = quote.path("open");
-                        JsonNode highs = quote.path("high");
-                        JsonNode lows = quote.path("low");
-                        JsonNode closes = quote.path("close");
-                        JsonNode volumes = quote.path("volume");
-                        
-                        Map<LocalDateTime, HistoricalData.PriceData> priceDataMap = new HashMap<>();
-                        
-                        for (int i = 0; i < timestamps.size(); i++) {
-                            if (!opens.get(i).isNull() && !closes.get(i).isNull()) {
-                                LocalDateTime dateTime = LocalDateTime.ofInstant(
-                                    Instant.ofEpochSecond(timestamps.get(i).asLong()),
-                                    ZoneId.systemDefault()
-                                );
-                                
-                                HistoricalData.PriceData priceData = HistoricalData.PriceData.builder()
-                                    .open(BigDecimal.valueOf(opens.get(i).asDouble()))
-                                    .high(BigDecimal.valueOf(highs.get(i).asDouble()))
-                                    .low(BigDecimal.valueOf(lows.get(i).asDouble()))
-                                    .close(BigDecimal.valueOf(closes.get(i).asDouble()))
-                                    .volume(volumes.get(i).asLong())
-                                    .build();
-                                
-                                priceDataMap.put(dateTime, priceData);
-                            }
-                        }
-                        
-                        log.info("Successfully fetched {} data points for {} in {}", 
-                                priceDataMap.size(), ticker, year);
-                        
-                        return Optional.of(HistoricalData.builder()
-                            .ticker(ticker)
-                            .priceData(priceDataMap)
-                            .build());
-                    }
+            JsonNode chartNode = jsonNode.path("chart");
+
+            // Check for API error
+            if (!chartNode.path("error").isNull()) {
+                log.warn("Yahoo Finance API error for {}: {}", ticker, chartNode.path("error"));
+                return Optional.empty();
+            }
+
+            // chart.result is an array (not chart itself)
+            JsonNode resultArray = chartNode.path("result");
+            if (!resultArray.isArray() || resultArray.size() == 0) {
+                log.warn("No result array in response for: {}", ticker);
+                return Optional.empty();
+            }
+
+            JsonNode data = resultArray.get(0);
+            JsonNode timestamps = data.path("timestamp");
+            JsonNode indicators = data.path("indicators").path("quote");
+
+            if (!timestamps.isArray() || timestamps.size() == 0) {
+                log.warn("No timestamp data for: {}", ticker);
+                return Optional.empty();
+            }
+
+            if (!indicators.isArray() || indicators.size() == 0) {
+                log.warn("No quote indicators for: {}", ticker);
+                return Optional.empty();
+            }
+
+            JsonNode quote = indicators.get(0);
+            JsonNode opens = quote.path("open");
+            JsonNode highs = quote.path("high");
+            JsonNode lows = quote.path("low");
+            JsonNode closes = quote.path("close");
+            JsonNode volumes = quote.path("volume");
+
+            Map<LocalDateTime, HistoricalData.PriceData> priceDataMap = new HashMap<>();
+
+            for (int i = 0; i < timestamps.size(); i++) {
+                JsonNode openNode = opens.get(i);
+                JsonNode closeNode = closes.get(i);
+
+                if (openNode != null && !openNode.isNull() && closeNode != null && !closeNode.isNull()) {
+                    LocalDateTime dateTime = LocalDateTime.ofInstant(
+                        Instant.ofEpochSecond(timestamps.get(i).asLong()),
+                        ZoneId.of("America/New_York")
+                    );
+
+                    HistoricalData.PriceData priceData = HistoricalData.PriceData.builder()
+                        .open(BigDecimal.valueOf(openNode.asDouble()))
+                        .high(BigDecimal.valueOf(highs.get(i).asDouble()))
+                        .low(BigDecimal.valueOf(lows.get(i).asDouble()))
+                        .close(BigDecimal.valueOf(closeNode.asDouble()))
+                        .volume(volumes.get(i).asLong())
+                        .build();
+
+                    priceDataMap.put(dateTime, priceData);
                 }
             }
-            
-            log.warn("No valid data found in response for: {}", ticker);
-            return Optional.empty();
-            
+
+            if (priceDataMap.isEmpty()) {
+                log.warn("No valid price data parsed for: {}", ticker);
+                return Optional.empty();
+            }
+
+            log.info("Successfully fetched {} data points for {} in {}",
+                    priceDataMap.size(), ticker, year);
+
+            return Optional.of(HistoricalData.builder()
+                .ticker(ticker)
+                .priceData(priceDataMap)
+                .build());
+
         } catch (Exception e) {
             log.error("Error fetching yearly data for ticker: {}", ticker, e);
             return Optional.empty();

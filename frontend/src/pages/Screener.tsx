@@ -65,10 +65,10 @@ const Screener: React.FC = () => {
   const [filters, setFilters] = useState({
     minScore: 0,
     includeSignals: true,
-    maxResults: 100,
+    maxResults: 1000,  // Fetch all stocks to get bearish/neutral/bullish
     signalType: 'all' as 'all' | 'bullish' | 'bearish'
   });
-  const [activeFilter, setActiveFilter] = useState<'all' | 'bullish' | 'bearish'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'bullish' | 'bearish' | 'neutral'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -84,8 +84,9 @@ const Screener: React.FC = () => {
       }
       setError(null);
 
+      // Use minScore=0 to get ALL stocks including bearish ones
       const params = new URLSearchParams({
-        minScore: filters.minScore.toString(),
+        minScore: '0',
         maxResults: filters.maxResults.toString(),
         includeSignals: filters.includeSignals.toString()
       });
@@ -134,6 +135,9 @@ const Screener: React.FC = () => {
       if (activeFilter === 'bearish' && candidate.signalAnalysis.primarySignal !== 'BEARISH') {
         return false;
       }
+      if (activeFilter === 'neutral' && candidate.signalAnalysis.primarySignal !== 'NEUTRAL') {
+        return false;
+      }
     }
 
     return true;
@@ -158,7 +162,7 @@ const Screener: React.FC = () => {
   const signalCounts = getSignalCounts();
 
   // Filter handlers
-  const handleFilterClick = (filter: 'all' | 'bullish' | 'bearish') => {
+  const handleFilterClick = (filter: 'all' | 'bullish' | 'bearish' | 'neutral') => {
     setActiveFilter(filter);
   };
 
@@ -217,48 +221,61 @@ const Screener: React.FC = () => {
             
             {/* Stats Row - Clickable Filters */}
             {screeningData && (
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-3 md:grid-cols-5 gap-3">
                 <button
                   onClick={() => handleFilterClick('all')}
                   className={`text-center p-3 rounded-xl transition-all duration-300 ${
-                    activeFilter === 'all' 
-                      ? 'bg-white/20 backdrop-blur-md border border-white/30' 
+                    activeFilter === 'all'
+                      ? 'bg-white/20 backdrop-blur-md border border-white/30'
                       : 'hover:bg-white/10'
                   }`}
                 >
-                  <div className="text-xl md:text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
+                  <div className="text-lg md:text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
                     {screeningData.totalAnalyzed}
                   </div>
-                  <div className="text-xs md:text-sm" style={{ color: 'var(--text-tertiary)' }}>Analyzed</div>
+                  <div className="text-xs md:text-sm" style={{ color: 'var(--text-tertiary)' }}>All</div>
                 </button>
                 <button
                   onClick={() => handleFilterClick('bullish')}
                   className={`text-center p-3 rounded-xl transition-all duration-300 ${
-                    activeFilter === 'bullish' 
-                      ? 'bg-green-500/20 backdrop-blur-md border border-green-400/50' 
+                    activeFilter === 'bullish'
+                      ? 'bg-green-500/20 backdrop-blur-md border border-green-400/50'
                       : 'hover:bg-green-500/10'
                   }`}
                 >
-                  <div className="text-xl md:text-2xl font-bold" style={{ color: 'var(--signal-bullish)' }}>
+                  <div className="text-lg md:text-2xl font-bold" style={{ color: 'var(--signal-bullish)' }}>
                     {signalCounts.bullish}
                   </div>
                   <div className="text-xs md:text-sm" style={{ color: 'var(--text-tertiary)' }}>Bullish</div>
                 </button>
                 <button
+                  onClick={() => handleFilterClick('neutral')}
+                  className={`text-center p-3 rounded-xl transition-all duration-300 ${
+                    activeFilter === 'neutral'
+                      ? 'bg-orange-500/20 backdrop-blur-md border border-orange-400/50'
+                      : 'hover:bg-orange-500/10'
+                  }`}
+                >
+                  <div className="text-lg md:text-2xl font-bold" style={{ color: 'var(--signal-neutral, #f59e0b)' }}>
+                    {signalCounts.neutral}
+                  </div>
+                  <div className="text-xs md:text-sm" style={{ color: 'var(--text-tertiary)' }}>Sideways</div>
+                </button>
+                <button
                   onClick={() => handleFilterClick('bearish')}
                   className={`text-center p-3 rounded-xl transition-all duration-300 ${
-                    activeFilter === 'bearish' 
-                      ? 'bg-red-500/20 backdrop-blur-md border border-red-400/50' 
+                    activeFilter === 'bearish'
+                      ? 'bg-red-500/20 backdrop-blur-md border border-red-400/50'
                       : 'hover:bg-red-500/10'
                   }`}
                 >
-                  <div className="text-xl md:text-2xl font-bold" style={{ color: 'var(--signal-bearish)' }}>
+                  <div className="text-lg md:text-2xl font-bold" style={{ color: 'var(--signal-bearish)' }}>
                     {signalCounts.bearish}
                   </div>
                   <div className="text-xs md:text-sm" style={{ color: 'var(--text-tertiary)' }}>Bearish</div>
                 </button>
                 <div className="text-center p-3">
-                  <div className="text-xl md:text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
+                  <div className="text-lg md:text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
                     {filteredCandidates.length}
                   </div>
                   <div className="text-xs md:text-sm" style={{ color: 'var(--text-tertiary)' }}>Showing</div>
@@ -302,17 +319,21 @@ const Screener: React.FC = () => {
             {activeFilter !== 'all' && (
               <div className="mb-4">
                 <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
-                  activeFilter === 'bullish' 
-                    ? 'bg-green-500/20 border border-green-400/30' 
-                    : 'bg-red-500/20 border border-red-400/30'
+                  activeFilter === 'bullish'
+                    ? 'bg-green-500/20 border border-green-400/30'
+                    : activeFilter === 'bearish'
+                    ? 'bg-red-500/20 border border-red-400/30'
+                    : 'bg-orange-500/20 border border-orange-400/30'
                 }`}>
                   {activeFilter === 'bullish' ? (
                     <TrendingUp className="w-4 h-4" style={{ color: 'var(--signal-bullish)' }} />
-                  ) : (
+                  ) : activeFilter === 'bearish' ? (
                     <TrendingDown className="w-4 h-4" style={{ color: 'var(--signal-bearish)' }} />
+                  ) : (
+                    <Activity className="w-4 h-4" style={{ color: 'var(--signal-neutral, #f59e0b)' }} />
                   )}
                   <span style={{ color: 'var(--text-primary)' }}>
-                    Showing {activeFilter} signals ({filteredCandidates.length} stocks)
+                    Showing {activeFilter === 'neutral' ? 'sideways' : activeFilter} signals ({filteredCandidates.length} stocks)
                   </span>
                 </div>
               </div>

@@ -44,4 +44,13 @@ public interface StockPriceRepository extends JpaRepository<StockPrice, StockPri
 
     @Query("SELECT sp FROM StockPrice sp WHERE sp.ticker = :ticker AND sp.date <= :targetTime ORDER BY sp.date DESC LIMIT 1")
     Optional<StockPrice> findClosestPriceToTimestamp(@Param("ticker") String ticker, @Param("targetTime") LocalDateTime targetTime);
+
+    /**
+     * Daily bars only: the one row per date stored at 09:30:00 UTC. Other rows on the same date
+     * (intraday snapshots) are excluded. Read-only.
+     */
+    @Query(value = "SELECT * FROM stock_prices WHERE ticker = :ticker "
+        + "AND CAST((date AT TIME ZONE 'UTC') AS time) = TIME '09:30:00' ORDER BY date",
+        nativeQuery = true)
+    List<StockPrice> findDailyBarsByTicker(@Param("ticker") String ticker);
 }

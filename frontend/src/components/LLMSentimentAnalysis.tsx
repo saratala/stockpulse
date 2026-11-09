@@ -143,6 +143,36 @@ export const LLMSentimentAnalysis: React.FC = () => {
     }
   }, [selectedTicker]);
 
+  // Handler for ticker selection - selects and auto-analyzes
+  const handleTickerSelect = async (ticker: string) => {
+    if (ticker === selectedTicker) {
+      // If already selected, just re-analyze
+      if (!isAnalyzing && !isRefreshing) {
+        analyzeTicker();
+      }
+      return;
+    }
+    setSelectedTicker(ticker);
+    // Clear previous data to show fresh results
+    setSentimentData(null);
+
+    // Auto-analyze after a short delay for state to update
+    setTimeout(async () => {
+      try {
+        setIsAnalyzing(true);
+        setError(null);
+        const result = await analyzeSentimentForTicker(ticker);
+        setSentimentData(result);
+        await loadSentimentSummary();
+      } catch (err) {
+        setError('Failed to analyze sentiment for ' + ticker);
+        console.error('Error analyzing sentiment:', err);
+      } finally {
+        setIsAnalyzing(false);
+      }
+    }, 100);
+  };
+
   const loadSentimentSummary = async () => {
     try {
       setIsLoading(true);
@@ -429,17 +459,23 @@ export const LLMSentimentAnalysis: React.FC = () => {
               return (
                 <button
                   key={ticker}
-                  onClick={() => setSelectedTicker(ticker)}
+                  onClick={() => handleTickerSelect(ticker)}
+                  disabled={isAnalyzing || isRefreshing}
                   className={`p-3 rounded-xl transition-all ${
                     selectedTicker === ticker
                       ? 'glass-ticker-selected'
                       : 'glass-ticker-button hover:scale-105'
-                  }`}
+                  } ${isAnalyzing || isRefreshing ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   <div className="flex flex-col items-start">
-                    <span className={`font-bold text-sm ${selectedTicker === ticker ? 'ticker-text' : 'text-slate-200'}`}>
-                      {ticker}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className={`font-bold text-sm ${selectedTicker === ticker ? 'ticker-text' : 'text-slate-200'}`}>
+                        {ticker}
+                      </span>
+                      {selectedTicker === ticker && isAnalyzing && (
+                        <div className="w-3 h-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                      )}
+                    </div>
                     {priceData ? (
                       <div className="flex flex-col w-full mt-1">
                         <span className="text-lg font-semibold text-slate-50">
@@ -459,6 +495,14 @@ export const LLMSentimentAnalysis: React.FC = () => {
               );
             })}
           </div>
+          )}
+
+          {/* Analysis Status Indicator */}
+          {isAnalyzing && selectedTicker && (
+            <div className="mt-4 flex items-center gap-3 p-3 bg-indigo-500/10 border border-indigo-500/30 rounded-lg">
+              <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+              <span className="text-indigo-400">Analyzing {selectedTicker}...</span>
+            </div>
           )}
         </div>
       </GlassContainer>

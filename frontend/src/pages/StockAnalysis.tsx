@@ -11,12 +11,16 @@ import {
   Star,
   RefreshCw,
   Info,
-  Eye
+  Eye,
+  Clock,
+  TrendingUp,
+  Database
 } from 'lucide-react';
-import { XAxis, YAxis, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { XAxis, YAxis, ResponsiveContainer, AreaChart, Area, Tooltip, ComposedChart, Bar } from 'recharts';
 import GlassContainer from '../components/GlassContainer';
 import GlassButton from '../components/GlassButton';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { fetch15MinBars, fetchDataAvailability, fetchMassiveDataForDate, AggregatedBar, DataAvailability } from '../services/api';
 import '../styles/glassmorphism.css';
 
 interface StockInfo {
@@ -81,6 +85,13 @@ const StockAnalysis: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'overview' | 'sentiment' | 'news'>('overview');
   const [refreshing, setRefreshing] = useState(false);
 
+  // Intraday data state
+  const [intradayBars, setIntradayBars] = useState<AggregatedBar[]>([]);
+  const [intradayLoading, setIntradayLoading] = useState(false);
+  const [dataAvailability, setDataAvailability] = useState<DataAvailability | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [fetchingNewData, setFetchingNewData] = useState(false);
+
   const API_BASE_URL = '/api/v1';
 
   const fetchAnalysis = async (showRefreshSpinner = false) => {
@@ -124,6 +135,58 @@ const StockAnalysis: React.FC = () => {
 
   useEffect(() => {
     fetchAnalysis();
+  }, [ticker]);
+
+  // Fetch intraday data availability and bars
+  const fetchIntradayData = async (date?: string) => {
+    if (!ticker) return;
+
+    try {
+      setIntradayLoading(true);
+      const upperTicker = ticker.toUpperCase();
+
+      // First check data availability
+      const availability = await fetchDataAvailability(upperTicker);
+      setDataAvailability(availability);
+
+      if (availability.hasData) {
+        // Use provided date or latest available date
+        const targetDate = date || availability.latestDate || '';
+        setSelectedDate(targetDate);
+
+        if (targetDate) {
+          const response = await fetch15MinBars(upperTicker, targetDate);
+          setIntradayBars(response.bars || []);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching intraday data:', err);
+    } finally {
+      setIntradayLoading(false);
+    }
+  };
+
+  // Fetch new data from Massive Data API
+  const handleFetchNewData = async (date: string) => {
+    if (!ticker || fetchingNewData) return;
+
+    try {
+      setFetchingNewData(true);
+      await fetchMassiveDataForDate(ticker.toUpperCase(), date);
+      // Refresh the intraday data after fetching
+      await fetchIntradayData(date);
+    } catch (err) {
+      console.error('Error fetching new data:', err);
+    } finally {
+      setFetchingNewData(false);
+    }
+  };
+
+  // Load intraday data when ticker changes
+  useEffect(() => {
+    if (ticker) {
+      fetchIntradayData();
+    }
   }, [ticker]);
 
   const getSentimentColor = (sentiment: number) => {
@@ -334,13 +397,184 @@ const StockAnalysis: React.FC = () => {
                   </div>
                 </GlassContainer>
 
+                {/* Intraday Chart - 15 Minute Bars */}
+                <GlassContainer>
+                  <div className="p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-bold text-slate-50 flex items-center gap-2">
+                        <Clock className="w-5 h-5 text-cyan-400" />
+                        Intraday Chart (15-min)
+                        {intradayBars.length > 0 && (
+                          <span className="ml-2 px-2 py-0.5 text-xs bg-emerald-500/20 text-emerald-400 rounded-full flex items-center gap-1">
+                            <Database className="w-3 h-3" />
+                            Real Data
+                          </span>
+                        )}
+                      </h3>
+                      <div className="flex items-center gap-2">
+                        {selectedDate && (
+                          <span className="text-sm text-slate-400">{selectedDate}</span>
+                        )}
+                        {dataAvailability && !dataAvailability.hasData && (
+                          <GlassButton
+                            size="sm"
+                            variant="accent"
+                            onClick={() => handleFetchNewData(new Date().toISOString().split('T')[0])}
+                            disabled={fetchingNewData}
+                            icon={fetchingNewData ? <RefreshCw className="w-3 h-3 animate-spin" /> : <TrendingUp className="w-3 h-3" />}
+                          >
+                            {fetchingNewData ? 'Fetching...' : 'Fetch Data'}
+                          </GlassButton>
+                        )}
+                      </div>
+                    </div>
+
+                    {intradayLoading ? (
+                      <div className="h-64 flex items-center justify-center">
+                        <LoadingSpinner size="md" text="Loading intraday data..." />
+                      </div>
+                    ) : intradayBars.length > 0 ? (
+                      <>
+                        {/* Data availability info */}
+                        {dataAvailability && (
+                          <div className="mb-4 flex items-center gap-4 text-xs text-slate-400">
+                            <span>Records: {dataAvailability.totalMinuteRecords}</span>
+                            <span>Days: {dataAvailability.estimatedTradingDays}</span>
+                            {dataAvailability.earliestDate && (
+                              <span>Range: {dataAvailability.earliestDate} to {dataAvailability.latestDate}</span>
+                            )}
+                          </div>
+                        )}
+                        <div className="h-64">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <ComposedChart data={intradayBars}>
+                              <defs>
+                                <linearGradient id="intradayGradient" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%" stopColor="#22D3EE" stopOpacity={0.3}/>
+                                  <stop offset="95%" stopColor="#22D3EE" stopOpacity={0}/>
+                                </linearGradient>
+                              </defs>
+                              <XAxis
+                                dataKey="timestamp"
+                                tickFormatter={(val) => {
+                                  const date = new Date(val);
+                                  return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                                }}
+                                stroke="#94A3B8"
+                                tick={{ fill: '#94A3B8', fontSize: 10 }}
+                                interval="preserveStartEnd"
+                              />
+                              <YAxis
+                                yAxisId="price"
+                                stroke="#94A3B8"
+                                tick={{ fill: '#94A3B8', fontSize: 10 }}
+                                domain={['auto', 'auto']}
+                                tickFormatter={(val) => `$${val.toFixed(0)}`}
+                                orientation="left"
+                              />
+                              <YAxis
+                                yAxisId="volume"
+                                stroke="#94A3B8"
+                                tick={{ fill: '#94A3B8', fontSize: 10 }}
+                                orientation="right"
+                                tickFormatter={(val) => `${(val / 1000000).toFixed(1)}M`}
+                              />
+                              <Tooltip
+                                contentStyle={{
+                                  backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                                  border: '1px solid rgba(100, 116, 139, 0.3)',
+                                  borderRadius: '8px',
+                                  fontSize: '12px'
+                                }}
+                                labelFormatter={(val) => new Date(val).toLocaleTimeString('en-US', {
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                                formatter={(value: number, name: string) => {
+                                  if (name === 'volume') return [`${(value / 1000000).toFixed(2)}M`, 'Volume'];
+                                  return [`$${value.toFixed(2)}`, name.charAt(0).toUpperCase() + name.slice(1)];
+                                }}
+                              />
+                              <Bar
+                                yAxisId="volume"
+                                dataKey="volume"
+                                fill="#6366F1"
+                                opacity={0.3}
+                              />
+                              <Area
+                                yAxisId="price"
+                                type="monotone"
+                                dataKey="close"
+                                stroke="#22D3EE"
+                                fill="url(#intradayGradient)"
+                                strokeWidth={2}
+                              />
+                            </ComposedChart>
+                          </ResponsiveContainer>
+                        </div>
+                        {/* OHLC Summary */}
+                        {intradayBars.length > 0 && (
+                          <div className="mt-4 grid grid-cols-4 gap-2">
+                            <div className="p-2 rounded-lg bg-slate-800/50 text-center">
+                              <div className="text-xs text-slate-400">Open</div>
+                              <div className="text-sm font-medium text-slate-100">
+                                ${intradayBars[0]?.open?.toFixed(2)}
+                              </div>
+                            </div>
+                            <div className="p-2 rounded-lg bg-slate-800/50 text-center">
+                              <div className="text-xs text-slate-400">High</div>
+                              <div className="text-sm font-medium text-emerald-400">
+                                ${Math.max(...intradayBars.map(b => b.high)).toFixed(2)}
+                              </div>
+                            </div>
+                            <div className="p-2 rounded-lg bg-slate-800/50 text-center">
+                              <div className="text-xs text-slate-400">Low</div>
+                              <div className="text-sm font-medium text-red-400">
+                                ${Math.min(...intradayBars.map(b => b.low)).toFixed(2)}
+                              </div>
+                            </div>
+                            <div className="p-2 rounded-lg bg-slate-800/50 text-center">
+                              <div className="text-xs text-slate-400">Close</div>
+                              <div className="text-sm font-medium text-slate-100">
+                                ${intradayBars[intradayBars.length - 1]?.close?.toFixed(2)}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="h-64 flex flex-col items-center justify-center text-slate-400">
+                        <Database className="w-12 h-12 mb-4 opacity-50" />
+                        <p className="mb-4">No intraday data available for {ticker?.toUpperCase()}</p>
+                        <GlassButton
+                          size="sm"
+                          variant="accent"
+                          onClick={() => {
+                            const yesterday = new Date();
+                            yesterday.setDate(yesterday.getDate() - 1);
+                            // Skip weekends
+                            while (yesterday.getDay() === 0 || yesterday.getDay() === 6) {
+                              yesterday.setDate(yesterday.getDate() - 1);
+                            }
+                            handleFetchNewData(yesterday.toISOString().split('T')[0]);
+                          }}
+                          disabled={fetchingNewData}
+                          icon={fetchingNewData ? <RefreshCw className="w-3 h-3 animate-spin" /> : <TrendingUp className="w-3 h-3" />}
+                        >
+                          {fetchingNewData ? 'Fetching...' : 'Fetch Latest Data'}
+                        </GlassButton>
+                      </div>
+                    )}
+                  </div>
+                </GlassContainer>
+
                 {/* Price History Chart */}
                 {priceHistory.length > 0 && (
                   <GlassContainer>
                     <div className="p-6">
                       <h3 className="text-lg font-bold text-slate-50 mb-4 flex items-center gap-2">
                         <BarChart3 className="w-5 h-5 text-indigo-400" />
-                        Price History
+                        Daily Price History
                       </h3>
                       <div className="h-64">
                         <ResponsiveContainer width="100%" height="100%">

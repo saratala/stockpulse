@@ -3,18 +3,19 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Navbar from './components/Navbar';
 import Dashboard from './pages/Dashboard';
 import StockDetails from './pages/StockDetails';
-import PredictionsHistory from './pages/PredictionsHistory';
 import Screener from './pages/Screener';
 import StockAnalysis from './pages/StockAnalysis';
 import BacktestingDashboard from './pages/BacktestingDashboard';
 import AIAnalysis from './pages/AIAnalysis';
 import PredictionAccuracy from './pages/PredictionAccuracy';
 import NotificationSystem from './components/NotificationSystem';
+import AuthGate from './components/AuthGate';
 import './styles/App.css';
 import './styles/glassmorphism.css';
 
 function App() {
   return (
+    <AuthGate>
     <Router>
       <div className="App min-h-screen" style={{ background: 'var(--bg-primary)' }}>
         <Navbar />
@@ -23,7 +24,7 @@ function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/stock/:ticker" element={<StockDetails />} />
             <Route path="/predictions" element={<Navigate to="/screener" replace />} />
-            <Route path="/predictions-history" element={<PredictionsHistory />} />
+            <Route path="/predictions-history" element={<Navigate to="/screener" replace />} />
             <Route path="/screener" element={<Screener />} />
             <Route path="/analysis/:ticker" element={<StockAnalysis />} />
             <Route path="/backtesting" element={<BacktestingDashboard />} />
@@ -41,6 +42,7 @@ function App() {
         />
       </div>
     </Router>
+    </AuthGate>
   );
 }
 

@@ -49,3 +49,21 @@ pgdata/
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Gradle
+.gradle/
+**/.gradle/
+
+# Claude Code agent worktrees
+.claude/worktrees/
+java-backend/build/
+
+# Backups / scratch
+*.bak
+*.orig
+
+# Local logs
+*.log
+
+# Uncompressed DB dump (commit the .gz instead)
+db/backup/stockpulse_data.sql

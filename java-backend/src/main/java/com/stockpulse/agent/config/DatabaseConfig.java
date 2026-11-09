@@ -6,7 +6,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 @Configuration
-@EnableJpaRepositories(basePackages = "com.stockpulse.agent.repository")
+@EnableJpaRepositories(basePackages = {"com.stockpulse.agent.repository", "com.stockpulse.agent.trading"})
 @EnableJpaAuditing
 @EnableTransactionManagement
 public class DatabaseConfig {

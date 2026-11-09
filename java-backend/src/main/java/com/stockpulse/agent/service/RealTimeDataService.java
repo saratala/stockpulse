@@ -1,5 +1,6 @@
 package com.stockpulse.agent.service;
 
+import com.stockpulse.agent.config.SP500Tickers;
 import com.stockpulse.agent.model.*;
 import com.stockpulse.agent.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -9,7 +10,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -30,11 +36,8 @@ public class RealTimeDataService {
     
     private final ExecutorService executorService = Executors.newFixedThreadPool(10);
     
-    private final List<String> DEFAULT_TICKERS = Arrays.asList(
-        "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "META", "NVDA", "NFLX",
-        "AMD", "INTC", "CRM", "ORCL", "ADBE", "CSCO", "AVGO", "TXN",
-        "QCOM", "MU", "PYPL", "SQ", "UBER", "ROKU", "ZM", "PLTR", "SNOW"
-    );
+    // Use the full S&P 500 ticker list from configuration
+    private final List<String> DEFAULT_TICKERS = SP500Tickers.getTickers();
     
     @Transactional
     public void updateRealTimeData() {
@@ -132,35 +135,93 @@ public class RealTimeDataService {
         stockRepository.save(stock);
     }
     
+    static final ZoneId MARKET_ZONE = ZoneId.of("America/New_York");
+    static final LocalTime MARKET_OPEN = LocalTime.of(9, 30);
+
     private void updateStockPrice(String ticker, YahooFinanceService.StockQuote quote) {
-        LocalDateTime now = LocalDateTime.now();
-        
-        StockPrice stockPrice = StockPrice.builder()
-            .ticker(ticker)
-            .date(now)
-            .open(quote.getPrice()) // For real-time, use current price as open
-            .high(quote.getPrice())
-            .low(quote.getPrice())
-            .close(quote.getPrice())
-            .volume(quote.getVolume())
-            .adjustedClose(quote.getPrice())
-            .build();
-        
-        stockPriceRepository.save(stockPrice);
+        updateStockPrice(ticker, quote, ZonedDateTime.now(MARKET_ZONE));
+    }
+
+    /**
+     * Upserts the current trading day's single daily bar from a real-time quote.
+     * stock_prices holds one row per ticker per trading day, keyed (ticker, date) with the date
+     * at 09:30 New York local time as a LocalDateTime - the same key the historical loader writes
+     * (YahooFinanceService converts Yahoo's daily timestamps with America/New_York; the JVM runs
+     * in UTC, so these rows are stored as 09:30+00). This used to insert a new row keyed by
+     * LocalDateTime.now() on every 5-minute run, around the clock.
+     */
+    void updateStockPrice(String ticker, YahooFinanceService.StockQuote quote, ZonedDateTime now) {
+        BigDecimal price = quote.getPrice();
+        if (price == null || price.signum() <= 0) {
+            return;
+        }
+
+        ZonedDateTime marketNow = now.withZoneSameInstant(MARKET_ZONE);
+        LocalDate tradingDay = marketNow.toLocalDate();
+        DayOfWeek dayOfWeek = tradingDay.getDayOfWeek();
+        if (dayOfWeek == DayOfWeek.SATURDAY || dayOfWeek == DayOfWeek.SUNDAY
+                || marketNow.toLocalTime().isBefore(MARKET_OPEN)) {
+            // No session today (yet): the quote is still the previous session's price.
+            log.debug("Market not open for {} on {}, skipping daily bar update", ticker, tradingDay);
+            return;
+        }
+
+        LocalDateTime barDate = tradingDay.atTime(MARKET_OPEN);
+        Long volume = quote.getVolume();
+        Optional<StockPrice> existing = stockPriceRepository.findById(new StockPriceId(ticker, barDate));
+
+        StockPrice bar;
+        if (existing.isPresent()) {
+            bar = existing.get();
+            BigDecimal high = bar.getHigh().max(price);
+            BigDecimal low = bar.getLow().min(price);
+            if (price.compareTo(bar.getClose()) == 0 && high.compareTo(bar.getHigh()) == 0
+                    && low.compareTo(bar.getLow()) == 0 && Objects.equals(volume, bar.getVolume())) {
+                return; // nothing changed (e.g. after the close)
+            }
+            bar.setHigh(high);
+            bar.setLow(low);
+            bar.setClose(price);
+            bar.setAdjustedClose(price);
+            bar.setVolume(volume);
+        } else {
+            // Weekday holiday: Yahoo keeps returning the last session's price and volume.
+            Optional<StockPrice> latest = stockPriceRepository.findLatestByTicker(ticker);
+            if (latest.isPresent() && price.compareTo(latest.get().getClose()) == 0
+                    && Objects.equals(volume, latest.get().getVolume())) {
+                log.debug("Quote for {} unchanged since last bar, skipping (market closed?)", ticker);
+                return;
+            }
+            bar = StockPrice.builder()
+                .ticker(ticker)
+                .date(barDate)
+                .open(price) // first quote seen in today's session
+                .high(price)
+                .low(price)
+                .close(price)
+                .volume(volume)
+                .adjustedClose(price)
+                .build();
+        }
+
+        stockPriceRepository.save(bar);
     }
     
     private void updateScreeningResult(String ticker) {
         try {
             log.debug("Updating screening result for ticker: {}", ticker);
-            
+
             Optional<YahooFinanceService.StockQuote> quoteOpt = yahooFinanceService.getCurrentQuote(ticker);
             if (!quoteOpt.isPresent()) {
                 return;
             }
-            
+
             YahooFinanceService.StockQuote quote = quoteOpt.get();
             Optional<YahooFinanceService.StockInfo> stockInfoOpt = yahooFinanceService.getStockInfo(ticker);
-            
+
+            // Ensure the Stock entity exists before creating screening result (foreign key constraint)
+            updateStockEntity(ticker, stockInfoOpt);
+
             // Calculate screening score
             double screeningScore = calculateScreeningScore(quote, stockInfoOpt);
             
@@ -280,8 +341,9 @@ public class RealTimeDataService {
     }
     
     private List<String> getActiveTickers() {
-        List<String> dbTickers = stockRepository.findAllTickers();
-        return dbTickers.isEmpty() ? DEFAULT_TICKERS : dbTickers;
+        // Always use the full S&P 500 ticker list to ensure comprehensive coverage
+        // The DEFAULT_TICKERS list contains all S&P 500 stocks
+        return DEFAULT_TICKERS;
     }
     
     private double calculateScreeningScore(YahooFinanceService.StockQuote quote, 
@@ -397,67 +459,106 @@ public class RealTimeDataService {
         return 0;
     }
     
-    @Transactional
     public int loadYearlyData(int year) {
-        log.info("Loading yearly historical data for year: {}", year);
-        
+        log.info("Loading yearly historical data for year: {} using parallel processing", year);
+
         List<String> tickers = getActiveTickers();
-        int totalRecords = 0;
-        
-        for (String ticker : tickers) {
-            try {
-                log.info("Fetching yearly data for ticker: {}", ticker);
-                Optional<YahooFinanceService.HistoricalData> historicalDataOpt = 
-                    yahooFinanceService.fetchYearlyData(ticker, year);
-                
-                if (historicalDataOpt.isPresent()) {
-                    YahooFinanceService.HistoricalData historicalData = historicalDataOpt.get();
-                    
-                    // Convert and save each day's data
-                    for (Map.Entry<LocalDateTime, YahooFinanceService.HistoricalData.PriceData> entry : 
-                         historicalData.getPriceData().entrySet()) {
-                        
-                        LocalDateTime date = entry.getKey();
-                        YahooFinanceService.HistoricalData.PriceData priceData = entry.getValue();
-                        
-                        // Check if record already exists to avoid duplicates
-                        Optional<StockPrice> existing = stockPriceRepository
-                            .findByTickerAndDateBetween(ticker, 
-                                date.minusMinutes(30), date.plusMinutes(30))
-                            .stream().findFirst();
-                        
-                        if (existing.isEmpty()) {
-                            StockPrice stockPrice = StockPrice.builder()
-                                .ticker(ticker)
-                                .date(date)
-                                .open(priceData.getOpen())
-                                .high(priceData.getHigh())
-                                .low(priceData.getLow())
-                                .close(priceData.getClose())
-                                .volume(priceData.getVolume())
-                                .adjustedClose(priceData.getClose())
-                                .build();
-                            
-                            stockPriceRepository.save(stockPrice);
-                            totalRecords++;
-                        }
+        java.util.concurrent.atomic.AtomicInteger totalRecords = new java.util.concurrent.atomic.AtomicInteger(0);
+        java.util.concurrent.atomic.AtomicInteger processedCount = new java.util.concurrent.atomic.AtomicInteger(0);
+
+        // Use a thread pool with 20 parallel threads for faster loading
+        ExecutorService parallelExecutor = Executors.newFixedThreadPool(20);
+
+        // Create futures for all tickers
+        List<CompletableFuture<Integer>> futures = tickers.stream()
+            .map(ticker -> CompletableFuture.supplyAsync(() -> {
+                try {
+                    int records = loadTickerYearlyData(ticker, year);
+                    int count = processedCount.incrementAndGet();
+                    if (count % 50 == 0) {
+                        log.info("Progress: {}/{} tickers processed for year {}", count, tickers.size(), year);
                     }
-                    
-                    log.info("Loaded {} records for ticker: {}", 
-                            historicalData.getPriceData().size(), ticker);
-                } else {
-                    log.warn("No historical data found for ticker: {}", ticker);
+                    return records;
+                } catch (Exception e) {
+                    log.error("Error loading yearly data for ticker: {}", ticker, e);
+                    return 0;
                 }
-                
-                // Add small delay to avoid rate limiting
-                Thread.sleep(1000);
-                
+            }, parallelExecutor))
+            .collect(Collectors.toList());
+
+        // Wait for all to complete and sum up records
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+        for (CompletableFuture<Integer> future : futures) {
+            try {
+                totalRecords.addAndGet(future.get());
             } catch (Exception e) {
-                log.error("Error loading yearly data for ticker: {}", ticker, e);
+                log.error("Error getting future result", e);
             }
         }
-        
-        log.info("Successfully loaded {} total historical records for year {}", totalRecords, year);
-        return totalRecords;
+
+        parallelExecutor.shutdown();
+
+        log.info("Successfully loaded {} total historical records for year {} ({} tickers)",
+                totalRecords.get(), year, tickers.size());
+        return totalRecords.get();
+    }
+
+    /**
+     * Load yearly data for a single ticker - used by parallel processing
+     */
+    @org.springframework.transaction.annotation.Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    public int loadTickerYearlyData(String ticker, int year) {
+        int recordsLoaded = 0;
+        try {
+            Optional<YahooFinanceService.HistoricalData> historicalDataOpt =
+                yahooFinanceService.fetchYearlyData(ticker, year);
+
+            if (historicalDataOpt.isPresent()) {
+                YahooFinanceService.HistoricalData historicalData = historicalDataOpt.get();
+
+                // Ensure stock entity exists first
+                updateStockEntity(ticker, yahooFinanceService.getStockInfo(ticker));
+
+                // Convert and save each day's data
+                for (Map.Entry<LocalDateTime, YahooFinanceService.HistoricalData.PriceData> entry :
+                     historicalData.getPriceData().entrySet()) {
+
+                    LocalDateTime date = entry.getKey();
+                    YahooFinanceService.HistoricalData.PriceData priceData = entry.getValue();
+
+                    // Check if record already exists to avoid duplicates
+                    Optional<StockPrice> existing = stockPriceRepository
+                        .findByTickerAndDateBetween(ticker,
+                            date.minusMinutes(30), date.plusMinutes(30))
+                        .stream().findFirst();
+
+                    if (existing.isEmpty()) {
+                        StockPrice stockPrice = StockPrice.builder()
+                            .ticker(ticker)
+                            .date(date)
+                            .open(priceData.getOpen())
+                            .high(priceData.getHigh())
+                            .low(priceData.getLow())
+                            .close(priceData.getClose())
+                            .volume(priceData.getVolume())
+                            .adjustedClose(priceData.getClose())
+                            .build();
+
+                        stockPriceRepository.save(stockPrice);
+                        recordsLoaded++;
+                    }
+                }
+
+                log.debug("Loaded {} records for ticker: {} year: {}", recordsLoaded, ticker, year);
+            }
+
+            // Small delay to be respectful to Yahoo API (50ms instead of 1000ms)
+            Thread.sleep(50);
+
+        } catch (Exception e) {
+            log.error("Error loading yearly data for ticker: {} year: {}", ticker, year, e);
+        }
+        return recordsLoaded;
     }
 }

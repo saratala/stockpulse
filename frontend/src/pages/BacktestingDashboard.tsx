@@ -1,6 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { fetchAllTickers, fetchLatestStockPrice, fetchStockPrices } from '../services/api';
+import {
+  fetchAllTickers,
+  fetchLatestStockPrice,
+  fetchStockPrices,
+  runDayTradingBacktest,
+  compareDayTradingStrategies,
+  getDayTradingStrategies,
+  runAdvancedDayTradingBacktest,
+  compareAdvancedDayTradingStrategies,
+  DayTradingBacktestResult,
+  StrategyComparisonResult,
+} from '../services/api';
 
 interface BacktestResult {
   strategy: string;
@@ -29,6 +40,15 @@ interface StrategyComparison {
   priceChangePercent: number;
 }
 
+interface StrategyInfo {
+  name: string;
+  description: string;
+  riskLevel: string;
+  tradesPerDay: string;
+  bestFor: string;
+  parameters: string[];
+}
+
 const BacktestingDashboard: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState<StrategyComparison | null>(null);
@@ -43,7 +63,26 @@ const BacktestingDashboard: React.FC = () => {
   const [tickers, setTickers] = useState<string[]>([]);
   const [tickersLoading, setTickersLoading] = useState(true);
 
-  // Fetch available tickers from API on component mount
+  // Day Trading State
+  const [backtestMode, setBacktestMode] = useState<'traditional' | 'daytrading'>('daytrading');
+  const [dayTradingStrategies, setDayTradingStrategies] = useState<Record<string, StrategyInfo>>({});
+  const [selectedDayTradingStrategy, setSelectedDayTradingStrategy] = useState('combined');
+  const [dayTradingResult, setDayTradingResult] = useState<DayTradingBacktestResult | null>(null);
+  const [dayTradingComparison, setDayTradingComparison] = useState<StrategyComparisonResult | null>(null);
+  const [dayTradingMode, setDayTradingMode] = useState<'single' | 'compare' | 'advanced'>('single');
+  const [dayTradingError, setDayTradingError] = useState<string | null>(null);
+  const [advancedConfig, setAdvancedConfig] = useState({
+    minConfirmations: 3,
+    riskPerTrade: 1.0,
+    maxPositionSize: 25.0,
+    stopLossAtr: 1.5,
+    takeProfitAtr: 2.5,
+    trailingStopAtr: 1.0,
+    maxDailyLoss: 3.0,
+    enableScalping: true,
+  });
+
+  // Fetch available tickers and day trading strategies from API on component mount
   useEffect(() => {
     const loadTickers = async () => {
       try {
@@ -59,8 +98,26 @@ const BacktestingDashboard: React.FC = () => {
         setTickersLoading(false);
       }
     };
+
+    const loadDayTradingStrategies = async () => {
+      try {
+        const strategies = await getDayTradingStrategies();
+        setDayTradingStrategies(strategies);
+      } catch (error) {
+        console.error('Error fetching day trading strategies:', error);
+      }
+    };
+
     loadTickers();
+    loadDayTradingStrategies();
   }, []);
+
+  // Clear day trading results when ticker changes to prevent stale data display
+  useEffect(() => {
+    setDayTradingResult(null);
+    setDayTradingComparison(null);
+    setDayTradingError(null);
+  }, [selectedTicker]);
 
   const loadHistoricalData = async () => {
     setIsLoadingData(true);
@@ -209,6 +266,100 @@ const BacktestingDashboard: React.FC = () => {
     };
   };
 
+  // Day Trading Backtest Functions
+  const handleRunDayTradingBacktest = async () => {
+    setIsLoading(true);
+    setDayTradingError(null);
+    setDayTradingResult(null);
+    setDayTradingComparison(null); // Clear comparison results when running single strategy
+    try {
+      const result = await runDayTradingBacktest(
+        selectedTicker,
+        selectedDayTradingStrategy,
+        parseFloat(initialCapital)
+      );
+      if (result.error) {
+        setDayTradingError(result.error);
+      } else {
+        setDayTradingResult(result);
+      }
+    } catch (err: any) {
+      setDayTradingError(err.message || 'Failed to run backtest');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCompareDayTradingStrategies = async () => {
+    setIsLoading(true);
+    setDayTradingError(null);
+    setDayTradingResult(null); // Clear single strategy result when comparing
+    setDayTradingComparison(null);
+    try {
+      const result = await compareDayTradingStrategies(selectedTicker, parseFloat(initialCapital));
+      setDayTradingComparison(result);
+    } catch (err: any) {
+      setDayTradingError(err.message || 'Failed to compare strategies');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRunAdvancedBacktest = async () => {
+    setIsLoading(true);
+    setDayTradingError(null);
+    setDayTradingResult(null);
+    setDayTradingComparison(null); // Clear comparison results when running single strategy
+    try {
+      const result = await runAdvancedDayTradingBacktest(
+        selectedTicker,
+        parseFloat(initialCapital),
+        advancedConfig
+      );
+      if (result.error) {
+        setDayTradingError(result.error);
+      } else {
+        setDayTradingResult(result);
+      }
+    } catch (err: any) {
+      setDayTradingError(err.message || 'Failed to run advanced backtest');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCompareAdvanced = async () => {
+    setIsLoading(true);
+    setDayTradingError(null);
+    setDayTradingResult(null); // Clear single strategy result when comparing
+    setDayTradingComparison(null);
+    try {
+      const result = await compareAdvancedDayTradingStrategies(selectedTicker, parseFloat(initialCapital));
+      setDayTradingComparison(result);
+    } catch (err: any) {
+      setDayTradingError(err.message || 'Failed to compare advanced strategies');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const getDayTradingRiskColor = (level: string) => {
+    switch (level) {
+      case 'HIGH': return 'text-red-500';
+      case 'MEDIUM-HIGH': return 'text-orange-500';
+      case 'MEDIUM': return 'text-yellow-500';
+      default: return 'text-green-500';
+    }
+  };
+
+  const getReturnColorClass = (returnStr: string | undefined | null) => {
+    if (!returnStr) return 'text-gray-600';
+    const value = parseFloat(returnStr.replace('%', ''));
+    if (value > 0) return 'text-green-600';
+    if (value < 0) return 'text-red-600';
+    return 'text-gray-600';
+  };
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
@@ -237,10 +388,530 @@ const BacktestingDashboard: React.FC = () => {
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">Comprehensive Backtesting Dashboard</h1>
-          <p className="text-lg text-gray-600">Test and compare 12 advanced trading strategies with historical data</p>
+          <p className="text-lg text-gray-600">Test and compare trading strategies with historical data</p>
+
+          {/* Mode Toggle */}
+          <div className="flex justify-center mt-4 gap-2">
+            <button
+              onClick={() => setBacktestMode('daytrading')}
+              className={`px-6 py-2 rounded-lg font-semibold transition-colors ${
+                backtestMode === 'daytrading'
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Day Trading
+            </button>
+            <button
+              onClick={() => setBacktestMode('traditional')}
+              className={`px-6 py-2 rounded-lg font-semibold transition-colors ${
+                backtestMode === 'traditional'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              Traditional Strategies
+            </button>
+          </div>
         </div>
 
-        {/* Configuration Panel */}
+        {/* Day Trading Mode */}
+        {backtestMode === 'daytrading' && (
+          <>
+            {/* Day Trading Configuration */}
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-sm">⚡</span>
+                </div>
+                <h3 className="text-xl font-semibold text-gray-800">Day Trading Backtest</h3>
+              </div>
+              <p className="text-gray-600 mb-4">Test intraday trading strategies with multiple trades per day</p>
+
+              {/* Ticker and Capital */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">Stock Ticker</label>
+                  <select
+                    value={selectedTicker}
+                    onChange={(e) => setSelectedTicker(e.target.value)}
+                    disabled={tickersLoading || tickers.length === 0}
+                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 bg-white text-gray-900"
+                  >
+                    {tickersLoading ? (
+                      <option value="">Loading...</option>
+                    ) : (
+                      tickers.map((ticker) => (
+                        <option key={ticker} value={ticker}>{ticker}</option>
+                      ))
+                    )}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">Initial Capital ($)</label>
+                  <input
+                    type="number"
+                    value={initialCapital}
+                    onChange={(e) => setInitialCapital(e.target.value)}
+                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 bg-white text-gray-900"
+                  />
+                </div>
+                <div className="flex items-end gap-2">
+                  <button
+                    onClick={() => setDayTradingMode('single')}
+                    className={`px-4 py-2 rounded-md font-medium ${
+                      dayTradingMode === 'single' ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-700'
+                    }`}
+                  >
+                    Single
+                  </button>
+                  <button
+                    onClick={() => setDayTradingMode('compare')}
+                    className={`px-4 py-2 rounded-md font-medium ${
+                      dayTradingMode === 'compare' ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700'
+                    }`}
+                  >
+                    Compare
+                  </button>
+                  <button
+                    onClick={() => setDayTradingMode('advanced')}
+                    className={`px-4 py-2 rounded-md font-medium ${
+                      dayTradingMode === 'advanced' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700'
+                    }`}
+                  >
+                    Advanced
+                  </button>
+                </div>
+              </div>
+
+              {/* Single Strategy Selection */}
+              {dayTradingMode === 'single' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                    {Object.entries(dayTradingStrategies).map(([key, strategy]) => (
+                      <button
+                        key={key}
+                        onClick={() => setSelectedDayTradingStrategy(key)}
+                        className={`p-3 rounded-lg border transition-all text-left ${
+                          selectedDayTradingStrategy === key
+                            ? 'border-purple-500 bg-purple-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <div className="font-semibold text-gray-800">{strategy.name}</div>
+                        <div className={`text-xs font-medium ${getDayTradingRiskColor(strategy.riskLevel)}`}>
+                          {strategy.riskLevel}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">{strategy.tradesPerDay} trades/day</div>
+                      </button>
+                    ))}
+                  </div>
+                  {selectedDayTradingStrategy && dayTradingStrategies[selectedDayTradingStrategy] && (
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <p className="text-gray-700">{dayTradingStrategies[selectedDayTradingStrategy].description}</p>
+                      <p className="text-sm text-gray-500 mt-2">
+                        Best for: {dayTradingStrategies[selectedDayTradingStrategy].bestFor}
+                      </p>
+                    </div>
+                  )}
+                  <button
+                    onClick={handleRunDayTradingBacktest}
+                    disabled={isLoading || !selectedTicker}
+                    className={`w-full py-3 px-4 rounded-md font-semibold transition-colors ${
+                      isLoading || !selectedTicker
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-purple-600 hover:bg-purple-700 text-white'
+                    }`}
+                  >
+                    {isLoading ? 'Running Backtest...' : 'Run Day Trading Backtest'}
+                  </button>
+                </div>
+              )}
+
+              {/* Compare All Strategies */}
+              {dayTradingMode === 'compare' && (
+                <div className="space-y-4">
+                  <p className="text-gray-700">
+                    Compare all 5 day trading strategies (Scalping, Momentum, Mean Reversion, Breakout, Combined)
+                    to find the best one for {selectedTicker || 'your stock'}.
+                  </p>
+                  <button
+                    onClick={handleCompareDayTradingStrategies}
+                    disabled={isLoading || !selectedTicker}
+                    className={`w-full py-3 px-4 rounded-md font-semibold transition-colors ${
+                      isLoading || !selectedTicker
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-green-600 hover:bg-green-700 text-white'
+                    }`}
+                  >
+                    {isLoading ? 'Comparing Strategies...' : 'Compare All Day Trading Strategies'}
+                  </button>
+                </div>
+              )}
+
+              {/* Advanced Configuration */}
+              {dayTradingMode === 'advanced' && (
+                <div className="space-y-4">
+                  <p className="text-gray-700 mb-4">
+                    Advanced day trading with sophisticated entry/exit rules: multiple confirmations,
+                    ATR-based position sizing, trailing stops, and daily loss limits.
+                  </p>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Min Confirmations</label>
+                      <input
+                        type="number"
+                        value={advancedConfig.minConfirmations}
+                        onChange={(e) => setAdvancedConfig({...advancedConfig, minConfirmations: Number(e.target.value)})}
+                        className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        min={1} max={6}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Risk Per Trade (%)</label>
+                      <input
+                        type="number"
+                        value={advancedConfig.riskPerTrade}
+                        onChange={(e) => setAdvancedConfig({...advancedConfig, riskPerTrade: Number(e.target.value)})}
+                        className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        step={0.1}
+                        min={0.1}
+                        max={5}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Max Position (%)</label>
+                      <input
+                        type="number"
+                        value={advancedConfig.maxPositionSize}
+                        onChange={(e) => setAdvancedConfig({...advancedConfig, maxPositionSize: Number(e.target.value)})}
+                        className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        step={5}
+                        min={5}
+                        max={100}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Max Daily Loss (%)</label>
+                      <input
+                        type="number"
+                        value={advancedConfig.maxDailyLoss}
+                        onChange={(e) => setAdvancedConfig({...advancedConfig, maxDailyLoss: Number(e.target.value)})}
+                        className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        step={0.5}
+                        min={0.5}
+                        max={10}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Stop Loss (ATR x)</label>
+                      <input
+                        type="number"
+                        value={advancedConfig.stopLossAtr}
+                        onChange={(e) => setAdvancedConfig({...advancedConfig, stopLossAtr: Number(e.target.value)})}
+                        className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        step={0.1}
+                        min={0.5}
+                        max={5}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Take Profit (ATR x)</label>
+                      <input
+                        type="number"
+                        value={advancedConfig.takeProfitAtr}
+                        onChange={(e) => setAdvancedConfig({...advancedConfig, takeProfitAtr: Number(e.target.value)})}
+                        className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        step={0.1}
+                        min={0.5}
+                        max={5}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Trailing Stop (ATR x)</label>
+                      <input
+                        type="number"
+                        value={advancedConfig.trailingStopAtr}
+                        onChange={(e) => setAdvancedConfig({...advancedConfig, trailingStopAtr: Number(e.target.value)})}
+                        className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                        step={0.1}
+                        min={0.3}
+                        max={3}
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <label className="flex items-center gap-2 cursor-pointer p-2 bg-gray-50 rounded-md border border-gray-200 w-full">
+                        <input
+                          type="checkbox"
+                          checked={advancedConfig.enableScalping}
+                          onChange={(e) => setAdvancedConfig({...advancedConfig, enableScalping: e.target.checked})}
+                          className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                        />
+                        <span className="text-sm text-gray-700">Enable Scalping</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div className="flex gap-4">
+                    <button
+                      onClick={handleRunAdvancedBacktest}
+                      disabled={isLoading || !selectedTicker}
+                      className={`flex-1 py-3 rounded-md font-semibold ${
+                        isLoading || !selectedTicker
+                          ? 'bg-gray-400 cursor-not-allowed'
+                          : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                      }`}
+                    >
+                      {isLoading ? 'Running...' : 'Run Advanced Backtest'}
+                    </button>
+                    <button
+                      onClick={handleCompareAdvanced}
+                      disabled={isLoading || !selectedTicker}
+                      className={`flex-1 py-3 rounded-md font-semibold ${
+                        isLoading || !selectedTicker
+                          ? 'bg-gray-400 cursor-not-allowed'
+                          : 'bg-purple-600 hover:bg-purple-700 text-white'
+                      }`}
+                    >
+                      {isLoading ? 'Comparing...' : 'Compare Presets'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Loading Indicator */}
+              {isLoading && (
+                <div className="mt-4 flex items-center justify-center gap-2 text-purple-600">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-purple-600"></div>
+                  <span>Running backtest...</span>
+                </div>
+              )}
+            </div>
+
+            {/* Error Display */}
+            {dayTradingError && (
+              <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded">
+                <div className="text-red-800 font-medium">Error</div>
+                <div className="text-red-700">{dayTradingError}</div>
+              </div>
+            )}
+
+            {/* Comparison Results */}
+            {dayTradingComparison && (
+              <div className="bg-white rounded-lg shadow-lg p-6">
+                <h3 className="text-xl font-semibold text-gray-800 mb-4">Strategy Comparison Results</h3>
+                <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <span className="text-green-700 font-medium">Best Strategy: </span>
+                  <span className="text-green-800 font-bold capitalize">{dayTradingComparison._bestStrategy}</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-gray-600 border-b">
+                        <th className="text-left py-3 px-4">Strategy</th>
+                        <th className="text-right py-3 px-4">Total Return</th>
+                        <th className="text-right py-3 px-4">Win Rate</th>
+                        <th className="text-right py-3 px-4">Trades</th>
+                        <th className="text-right py-3 px-4">Profit Factor</th>
+                        <th className="text-right py-3 px-4">Max Drawdown</th>
+                        <th className="text-left py-3 px-4">Recommendation</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dayTradingComparison._summary.map((row, idx) => (
+                        <tr
+                          key={idx}
+                          className={`border-b ${
+                            row.strategy === dayTradingComparison._bestStrategy ? 'bg-green-50' : ''
+                          }`}
+                        >
+                          <td className="py-3 px-4 font-medium capitalize text-gray-800">{row.strategy?.replace('_', ' ')}</td>
+                          <td className={`text-right py-3 px-4 font-semibold ${getReturnColorClass(row.totalReturn)}`}>
+                            {row.totalReturn}
+                          </td>
+                          <td className="text-right py-3 px-4 text-gray-800">{row.winRate}</td>
+                          <td className="text-right py-3 px-4 text-gray-800">{row.totalTrades}</td>
+                          <td className="text-right py-3 px-4 text-gray-800">{row.profitFactor?.toFixed(2)}</td>
+                          <td className="text-right py-3 px-4 text-red-600">{row.maxDrawdown}</td>
+                          <td className="py-3 px-4 text-xs text-gray-600">{row.recommendation?.split(' - ')[0]}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Single Backtest Results */}
+            {dayTradingResult && !dayTradingResult.error && (
+              <div className="space-y-6">
+                {/* Performance Summary */}
+                <div className="bg-white rounded-lg shadow-lg p-6">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-800">
+                        {dayTradingResult.ticker} - {dayTradingResult.strategy}
+                      </h3>
+                      <p className="text-sm text-gray-500">
+                        {dayTradingResult.testPeriod?.start} to {dayTradingResult.testPeriod?.end}
+                        ({dayTradingResult.testPeriod?.tradingDays} trading days)
+                      </p>
+                    </div>
+                    <div className={`px-4 py-2 rounded-lg text-sm font-medium ${
+                      dayTradingResult.recommendation?.includes('STRONG') ? 'bg-green-100 text-green-800' :
+                      dayTradingResult.recommendation?.includes('MODERATE') ? 'bg-yellow-100 text-yellow-800' :
+                      dayTradingResult.recommendation?.includes('NOT') ? 'bg-red-100 text-red-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {dayTradingResult.recommendation?.split(' - ')[0]}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <div className="text-xs text-gray-500">Initial Capital</div>
+                      <div className="text-lg font-bold text-gray-800">
+                        ${dayTradingResult.performance?.initialCapital?.toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <div className="text-xs text-gray-500">Final Capital</div>
+                      <div className="text-lg font-bold text-gray-800">
+                        ${dayTradingResult.performance?.finalCapital?.toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <div className="text-xs text-gray-500">Total Return</div>
+                      <div className={`text-lg font-bold ${getReturnColorClass(dayTradingResult.performance?.totalReturn || '0%')}`}>
+                        {dayTradingResult.performance?.totalReturn}
+                      </div>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <div className="text-xs text-gray-500">Buy & Hold</div>
+                      <div className={`text-lg font-bold ${getReturnColorClass(dayTradingResult.performance?.buyHoldReturn || '0%')}`}>
+                        {dayTradingResult.performance?.buyHoldReturn}
+                      </div>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <div className="text-xs text-gray-500">Win Rate</div>
+                      <div className="text-lg font-bold text-green-600">
+                        {dayTradingResult.performance?.winRate}
+                      </div>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <div className="text-xs text-gray-500">Sharpe Ratio</div>
+                      <div className="text-lg font-bold text-gray-800">
+                        {dayTradingResult.performance?.sharpeRatio}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-4 md:grid-cols-8 gap-2 mt-4 text-center">
+                    <div className="p-2">
+                      <div className="text-xs text-gray-500">Total Trades</div>
+                      <div className="font-medium">{dayTradingResult.performance?.totalTrades}</div>
+                    </div>
+                    <div className="p-2">
+                      <div className="text-xs text-gray-500">Trades/Day</div>
+                      <div className="font-medium">{dayTradingResult.performance?.tradesPerDay}</div>
+                    </div>
+                    <div className="p-2">
+                      <div className="text-xs text-gray-500">Profit Factor</div>
+                      <div className="font-medium">{dayTradingResult.performance?.profitFactor}</div>
+                    </div>
+                    <div className="p-2">
+                      <div className="text-xs text-gray-500">Max Drawdown</div>
+                      <div className="font-medium text-red-600">{dayTradingResult.performance?.maxDrawdown}</div>
+                    </div>
+                    <div className="p-2">
+                      <div className="text-xs text-gray-500">Avg Win</div>
+                      <div className="font-medium text-green-600">{dayTradingResult.performance?.avgWin}</div>
+                    </div>
+                    <div className="p-2">
+                      <div className="text-xs text-gray-500">Avg Loss</div>
+                      <div className="font-medium text-red-600">{dayTradingResult.performance?.avgLoss}</div>
+                    </div>
+                    <div className="p-2">
+                      <div className="text-xs text-gray-500">Max Consec Wins</div>
+                      <div className="font-medium text-green-600">{dayTradingResult.performance?.maxConsecutiveWins}</div>
+                    </div>
+                    <div className="p-2">
+                      <div className="text-xs text-gray-500">Max Consec Losses</div>
+                      <div className="font-medium text-red-600">{dayTradingResult.performance?.maxConsecutiveLosses}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Exit Reason Breakdown */}
+                {dayTradingResult.exitReasonBreakdown && (
+                  <div className="bg-white rounded-lg shadow-lg p-6">
+                    <h4 className="text-lg font-semibold text-gray-800 mb-4">Exit Reason Breakdown</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {Object.entries(dayTradingResult.exitReasonBreakdown).map(([reason, count]) => (
+                        <div key={reason} className="bg-gray-50 rounded-lg p-3">
+                          <div className="text-xs text-gray-500">{reason.replace(/_/g, ' ')}</div>
+                          <div className="text-lg font-bold text-gray-800">{count}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Recent Trades */}
+                {dayTradingResult.recentTrades && dayTradingResult.recentTrades.length > 0 && (
+                  <div className="bg-white rounded-lg shadow-lg p-6">
+                    <h4 className="text-lg font-semibold text-gray-800 mb-4">Recent Trades</h4>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-gray-600 border-b">
+                            <th className="text-center py-2 px-3">Direction</th>
+                            <th className="text-left py-2 px-3">Entry Time</th>
+                            <th className="text-right py-2 px-3">Entry $</th>
+                            <th className="text-left py-2 px-3">Exit Time</th>
+                            <th className="text-right py-2 px-3">Exit $</th>
+                            <th className="text-right py-2 px-3">Shares</th>
+                            <th className="text-right py-2 px-3">P&L</th>
+                            <th className="text-right py-2 px-3">Return</th>
+                            <th className="text-left py-2 px-3">Exit Reason</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dayTradingResult.recentTrades.map((trade, idx) => (
+                            <tr key={idx} className="border-b hover:bg-gray-50">
+                              <td className={`text-center py-2 px-3 font-medium ${
+                                trade.direction?.includes('LONG') ? 'text-green-600' : 'text-red-600'
+                              }`}>
+                                {trade.direction || 'N/A'}
+                              </td>
+                              <td className="py-2 px-3 text-gray-800 text-xs">{trade.entryTime || trade.date}</td>
+                              <td className="text-right py-2 px-3 text-gray-800">${trade.entryPrice?.toFixed(2)}</td>
+                              <td className="py-2 px-3 text-gray-800 text-xs">{trade.exitTime || trade.date}</td>
+                              <td className="text-right py-2 px-3 text-gray-800">${trade.exitPrice?.toFixed(2)}</td>
+                              <td className="text-right py-2 px-3 text-gray-800">{trade.shares?.toFixed(2)}</td>
+                              <td className={`text-right py-2 px-3 font-medium ${
+                                trade.pnl >= 0 ? 'text-green-600' : 'text-red-600'
+                              }`}>
+                                ${trade.pnl?.toFixed(2)}
+                              </td>
+                              <td className={`text-right py-2 px-3 ${getReturnColorClass(trade.returnPct)}`}>
+                                {trade.returnPct}
+                              </td>
+                              <td className="py-2 px-3 text-xs text-gray-600">{trade.exitReason}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Traditional Mode - Configuration Panel */}
+        {backtestMode === 'traditional' && (
+          <>
         <div className="bg-white rounded-lg shadow-lg p-6">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
@@ -249,7 +920,7 @@ const BacktestingDashboard: React.FC = () => {
             <h3 className="text-xl font-semibold text-gray-800">Backtest Configuration</h3>
           </div>
           <p className="text-gray-600 mb-6">Configure your backtesting parameters to test trading strategies</p>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <label htmlFor="ticker" className="block text-sm font-medium text-gray-700">Stock Ticker</label>
@@ -297,7 +968,7 @@ const BacktestingDashboard: React.FC = () => {
               </button>
             </div>
           </div>
-          
+
           {isLoading && (
             <div className="mt-6 space-y-2">
               <div className="flex justify-between text-sm text-gray-600">
@@ -753,6 +1424,8 @@ const BacktestingDashboard: React.FC = () => {
               </div>
             </div>
           </div>
+        )}
+        </>
         )}
       </div>
     </div>

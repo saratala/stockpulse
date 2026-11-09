@@ -1,24 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  TrendingUp, 
-  TrendingDown, 
+import {
+  TrendingUp,
+  TrendingDown,
   Minus,
   Star,
-  Activity,
   BarChart3,
-  DollarSign,
-  Info,
-  ChevronRight,
   Target,
   Zap,
   Shield,
-  AlertTriangle,
   ExternalLink,
   Eye,
   X
 } from 'lucide-react';
-import GlassContainer from './GlassContainer';
 import GlassButton from './GlassButton';
 import '../styles/glassmorphism.css';
 
@@ -56,9 +51,8 @@ interface SignalCardProps {
 }
 
 const SignalCard: React.FC<SignalCardProps> = ({ candidate, index = 0 }) => {
+  const navigate = useNavigate();
   const currentPrice = candidate.currentPrice || candidate.price || 0;
-  const [expanded, setExpanded] = useState(false);
-  const [showDetails, setShowDetails] = useState(false);
   const [showPopup, setShowPopup] = useState(false);
   const [hoverTimeout, setHoverTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
   const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0, placement: 'right' });
@@ -436,7 +430,8 @@ const SignalCard: React.FC<SignalCardProps> = ({ candidate, index = 0 }) => {
                   variant="accent"
                   onClick={(e) => {
                     e.stopPropagation();
-                    // Navigate to detailed analysis
+                    setShowPopup(false);
+                    navigate(`/ai-analysis?ticker=${candidate.ticker}`);
                   }}
                   icon={<ExternalLink className="w-3 h-3" />}
                   className="text-xs py-1.5 px-3"
@@ -448,7 +443,8 @@ const SignalCard: React.FC<SignalCardProps> = ({ candidate, index = 0 }) => {
                   variant="secondary"
                   onClick={(e) => {
                     e.stopPropagation();
-                    // Add to watchlist
+                    // Watchlist requires login - show message for now
+                    alert('Watchlist feature requires login. Coming soon!');
                   }}
                   icon={<Star className="w-3 h-3" />}
                   className="text-xs py-1.5 px-3"
@@ -460,7 +456,8 @@ const SignalCard: React.FC<SignalCardProps> = ({ candidate, index = 0 }) => {
                   variant="secondary"
                   onClick={(e) => {
                     e.stopPropagation();
-                    // View live data
+                    setShowPopup(false);
+                    navigate(`/stock/${candidate.ticker}`);
                   }}
                   icon={<Eye className="w-3 h-3" />}
                   className="text-xs py-1.5 px-3"
