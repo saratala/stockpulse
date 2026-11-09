@@ -69,10 +69,22 @@ management:
         include: health,info,metrics,prometheus
   endpoint:
     health:
-      show-details: always
+      # Health is public (Docker healthcheck), so report status only
+      show-details: never
 
 # Application specific properties
 app:
+  # API authentication: the web UI signs in with APP_PASSWORD (session cookie),
+  # scripts send X-API-Key: APP_API_KEY. The app refuses to start if auth is
+  # enabled and neither is set.
+  security:
+    enabled: ${APP_AUTH_ENABLED:true}
+    password: ${APP_PASSWORD:}
+    api-key: ${APP_API_KEY:}
+    session-secret: ${APP_SESSION_SECRET:}
+    session-hours: ${APP_SESSION_HOURS:168}
+  cors:
+    allowed-origins: ${APP_CORS_ORIGINS:http://localhost:3010}
   stock-data:
     api:
       yahoo-finance:

@@ -36,6 +36,9 @@ Flags: `--no-backtest` (skip the ~2 s/ticker backtest), `--base URL` (other host
 - **Exit code 2 / `"backend": "down"`** → stop and tell the user to start the stack from the repo
   root with `docker compose up -d` (everything runs in Docker; backend container listens on 8181),
   then re-run. Offer a web-only brief clearly marked "no backend data" if they want it now.
+- **`HTTP 401` errors** → the backend requires an API key. `gather.py` sends `X-API-Key` from
+  `STOCKPULSE_API_KEY` or `APP_API_KEY` in the repo `.env`; tell the user to set one (never print
+  its value). For a manual `curl`, add `-H "X-API-Key: $APP_API_KEY"`.
 - **`"unknown": true`** for a ticker → the backend doesn't track it (`/stocks/{t}` 404). Tell the
   user; check via web search whether the symbol exists (typo? delisted?). If real, give a short
   web-only section labelled "not in StockPulse universe" and exclude it from the ranking.

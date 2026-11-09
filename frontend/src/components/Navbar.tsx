@@ -1,7 +1,13 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { logout } from '../services/auth';
 
 const Navbar = () => {
+  const handleSignOut = async () => {
+    await logout();
+    window.location.assign('/');
+  };
+
   return (
     <nav 
       className="p-4 backdrop-blur-sm border-b"
@@ -55,6 +61,14 @@ const Navbar = () => {
           >
             Accuracy
           </Link>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="transition-colors duration-200 hover:brightness-75"
+            style={{ color: 'var(--text-secondary)' }}
+          >
+            Sign out
+          </button>
         </div>
       </div>
     </nav>

@@ -9,11 +9,13 @@ import BacktestingDashboard from './pages/BacktestingDashboard';
 import AIAnalysis from './pages/AIAnalysis';
 import PredictionAccuracy from './pages/PredictionAccuracy';
 import NotificationSystem from './components/NotificationSystem';
+import AuthGate from './components/AuthGate';
 import './styles/App.css';
 import './styles/glassmorphism.css';
 
 function App() {
   return (
+    <AuthGate>
     <Router>
       <div className="App min-h-screen" style={{ background: 'var(--bg-primary)' }}>
         <Navbar />
@@ -40,6 +42,7 @@ function App() {
         />
       </div>
     </Router>
+    </AuthGate>
   );
 }
 

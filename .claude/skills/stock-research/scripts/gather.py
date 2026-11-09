@@ -10,6 +10,7 @@ fetch/import/update/refresh endpoints and never touches anything trading-related
 Exit codes: 0 ok, 2 backend unreachable.
 """
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
@@ -19,13 +20,37 @@ from datetime import datetime
 BASE = "http://localhost:8181/api/v1"
 
 
+def _api_key():
+    """X-API-Key for the backend: $STOCKPULSE_API_KEY, else APP_API_KEY from the repo's .env."""
+    key = os.environ.get("STOCKPULSE_API_KEY")
+    if key:
+        return key.strip()
+    env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", ".env")
+    try:
+        with open(env_file) as f:
+            for line in f:
+                if line.startswith("APP_API_KEY="):
+                    return line.split("=", 1)[1].strip().strip("'\"") or None
+    except OSError:
+        pass
+    return None
+
+
+API_KEY = _api_key()
+
+
 def call(path, method="GET", timeout=120):
     req = urllib.request.Request(BASE + path, method=method)
+    if API_KEY:
+        req.add_header("X-API-Key", API_KEY)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             body = r.read().decode()
             return {"status": r.status, "data": json.loads(body) if body else None}
     except urllib.error.HTTPError as e:
+        if e.code == 401:
+            return {"status": 401, "error": "HTTP 401: backend needs an API key; set APP_API_KEY in the repo .env "
+                                            "or STOCKPULSE_API_KEY in the environment"}
         return {"status": e.code, "error": "HTTP %s" % e.code}
     except Exception as e:  # timeout, connection refused, bad JSON
         return {"status": None, "error": "%s: %s" % (type(e).__name__, e)}
