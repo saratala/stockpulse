@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import org.hibernate.annotations.ColumnTransformer;
+import org.hibernate.annotations.SQLInsert;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -19,6 +20,15 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 @IdClass(IntradayPriceId.class)
+// Hibernate applies @ColumnTransformer(write) to ordinary columns but not to @Id
+// columns, so without this the Eastern wall-clock time was stored as if it were UTC
+// (bars 4-5h early). Parameter order is Hibernate's: non-id attributes alphabetically,
+// then the id attributes. IntradayPriceRepositoryTimezoneTest pins both the order and
+// the conversion.
+@SQLInsert(sql = """
+    INSERT INTO stock_prices_intraday (close, high, low, open, volume, ticker, timestamp)
+    VALUES (?, ?, ?, ?, ?, ?, (CAST(? AS TIMESTAMP) AT TIME ZONE 'America/New_York'))
+    """)
 public class IntradayPrice {
 
     @Id
